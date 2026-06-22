@@ -381,7 +381,7 @@ function stepAnimal(e) {
     if(lost){
       e.target=null;
       const cands=nearby(e.x,e.y,g.senseRadius).filter(n=>
-        n!==e&&!n.dead&&n.type===eatType&&!(eatType===TYPE.PLANT&&isImmature(n)));
+        n!==e&&!n.dead&&n.type===eatType);
       if(cands.length){
         if(t===TYPE.HUNTER){
           // Herding: prefer isolated grazers — score using cands list to avoid extra nearby() calls
@@ -405,7 +405,8 @@ function stepAnimal(e) {
       else         { e.target=null; }
       if(e.target && d<g.size+e.target.genes.size+1.5){
         if(eatType===TYPE.PLANT){
-          const bite=Math.min(e.target.energy*0.38,26);
+          const ripeness=Math.min(1, e.target.age/(e.target.genes.size*80));
+          const bite=Math.min(e.target.energy*0.38,26)*Math.max(0.18,ripeness);
           if(bite>1){
             e.energy=Math.min(e.maxEnergy,e.energy+bite*(0.62+g.aggression*0.10));
             e.target.energy-=bite;
