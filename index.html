@@ -638,11 +638,52 @@ document.getElementById('btnPause').addEventListener('click',()=>{
 document.getElementById('btnClear').addEventListener('click',()=>{
   entities=[]; nutrients=[]; history=[]; inspected=null; maxGeneration=0;
   document.getElementById('st-gen').textContent='gen: 0';
+  localStorage.removeItem(SAVE_KEY);
 });
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+const SAVE_KEY = 'biosphere_v1';
+
+function saveState() {
+  const data = {
+    idCounter, maxGeneration,
+    entities: entities.map(e => ({
+      id: e.id, type: e.type, x: e.x, y: e.y,
+      vx: e.vx, vy: e.vy, genes: e.genes,
+      energy: e.energy, age: e.age, generation: e.generation
+    })),
+    nutrients: nutrients.map(n => ({ x: n.x, y: n.y, amount: n.amount })),
+    history
+  };
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch(_) {}
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    idCounter     = d.idCounter     ?? 0;
+    maxGeneration = d.maxGeneration ?? 0;
+    entities = (d.entities ?? []).map(s => ({
+      id: s.id, type: s.type,
+      x: clamp(s.x, 5, canvas.width-5),
+      y: clamp(s.y, 5, canvas.height-5),
+      vx: s.vx, vy: s.vy, genes: s.genes,
+      energy: s.energy, maxEnergy: energyMax(s.type, s.genes),
+      age: s.age, dead: false, target: null,
+      generation: s.generation, fleeing: false
+    }));
+    nutrients = d.nutrients ?? [];
+    history   = d.history   ?? [];
+    return true;
+  } catch(_) { return false; }
+}
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
 resize();
-seed();
+if (!loadState()) seed();
+setInterval(saveState, 15000);
 loop();
 </script>
 </body>
