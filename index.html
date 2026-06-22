@@ -434,12 +434,19 @@ function stepAnimal(e) {
     }
   }
 
+  // Wall repulsion — steers animals away from edges rather than pinning them
+  const wz=50, ws=0.22;
+  if(e.x<wz)                e.vx+=ws*(1-e.x/wz);
+  if(e.x>canvas.width-wz)  e.vx-=ws*(1-(canvas.width-e.x)/wz);
+  if(e.y<wz)                e.vy+=ws*(1-e.y/wz);
+  if(e.y>canvas.height-wz) e.vy-=ws*(1-(canvas.height-e.y)/wz);
+
   e.x+=e.vx; e.y+=e.vy;
   const r=g.size;
-  if(e.x<r)              {e.x=r;              e.vx*=-0.8;}
-  if(e.x>canvas.width-r) {e.x=canvas.width-r; e.vx*=-0.8;}
-  if(e.y<r)              {e.y=r;              e.vy*=-0.8;}
-  if(e.y>canvas.height-r){e.y=canvas.height-r;e.vy*=-0.8;}
+  if(e.x<r)              {e.x=r;              e.vx*=-0.6;}
+  if(e.x>canvas.width-r) {e.x=canvas.width-r; e.vx*=-0.6;}
+  if(e.y<r)              {e.y=r;              e.vy*=-0.6;}
+  if(e.y>canvas.height-r){e.y=canvas.height-r;e.vy*=-0.6;}
 
   if(e.poisonedTimer>0) e.poisonedTimer--;
   e.energy-=metabolicRate(g);
