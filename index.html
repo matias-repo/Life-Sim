@@ -84,9 +84,9 @@ const GENE_SPEC = {
 
 // Base energy parameters (scaled by size at runtime)
 const EP = {
-  [TYPE.PLANT]:  { start: 75,  maxBase: 130, repBase: 88,  costBase: 46 },
-  [TYPE.GRAZER]: { start: 110, maxBase: 200, repBase: 128, costBase: 64 },
-  [TYPE.HUNTER]: { start: 130, maxBase: 280, repBase: 178, costBase: 94 },
+  [TYPE.PLANT]:  { start: 65,  maxBase: 120, repBase: 88,  costBase: 45 },
+  [TYPE.GRAZER]: { start: 80,  maxBase: 185, repBase: 148, costBase: 65 },
+  [TYPE.HUNTER]: { start: 100, maxBase: 255, repBase: 210, costBase: 90 },
 };
 
 const SIZE_DEF = { [TYPE.PLANT]: 4, [TYPE.GRAZER]: 5, [TYPE.HUNTER]: 6 };
@@ -141,7 +141,7 @@ function repCost(type, g)      { return EP[type].costBase * (g.size / SIZE_DEF[t
 
 // Bigger + faster + higher metabolism = higher burn rate. This is the core trade-off.
 function metabolicRate(g) {
-  return (g.speed * g.speed * 0.010 + g.size * 0.0016 + 0.003) * g.metabolism;
+  return (g.speed * g.speed * 0.016 + g.size * 0.0024 + 0.005) * g.metabolism;
 }
 
 // HSL color derived purely from genes — hue encodes lineage, lightness encodes health
@@ -199,9 +199,9 @@ function spawnRandom(type) {
 let entities = [];
 
 function seed() {
-  for (let i = 0; i < 42; i++) entities.push(spawnRandom(TYPE.PLANT));
-  for (let i = 0; i < 14; i++) entities.push(spawnRandom(TYPE.GRAZER));
-  for (let i = 0; i <  3; i++) entities.push(spawnRandom(TYPE.HUNTER));
+  for (let i = 0; i < 55; i++) entities.push(spawnRandom(TYPE.PLANT));
+  for (let i = 0; i < 12; i++) entities.push(spawnRandom(TYPE.GRAZER));
+  for (let i = 0; i <  2; i++) entities.push(spawnRandom(TYPE.HUNTER));
 }
 seed();
 
@@ -241,7 +241,7 @@ function addNutrient(x, y, amount) {
 }
 
 // ── Simulation ─────────────────────────────────────────────────────────────────
-const MAX_ENTITIES = 720;
+const MAX_ENTITIES = 450;
 let newborns = [];
 
 function stepPlant(e) {
@@ -329,12 +329,27 @@ function stepAnimal(e) {
       }
 
       if (d < g.size + e.target.genes.size + 1.5) {
-        // Eat — aggression slightly improves energy extraction (more aggressive = less waste)
-        const gain = e.target.energy * (0.55 + g.aggression * 0.12);
-        e.energy = Math.min(e.maxEnergy, e.energy + gain);
-        addNutrient(e.target.x, e.target.y, e.target.energy * 0.3);
-        e.target.dead = true;
-        e.target = null;
+        if (eatType === TYPE.PLANT) {
+          // Graze: bite a chunk — plant survives unless nearly empty.
+          // This prevents grazers from wiping all plants in seconds.
+          const bite = Math.min(e.target.energy * 0.38, 26);
+          if (bite > 1) {
+            e.energy = Math.min(e.maxEnergy, e.energy + bite * (0.62 + g.aggression * 0.10));
+            e.target.energy -= bite;
+            if (e.target.energy < 5) {
+              addNutrient(e.target.x, e.target.y, e.target.energy);
+              e.target.dead = true;
+            }
+            e.target = null; // move on after each bite
+          }
+        } else {
+          // Kill: hunters consume prey entirely
+          const gain = e.target.energy * (0.55 + g.aggression * 0.12);
+          e.energy = Math.min(e.maxEnergy, e.energy + gain);
+          addNutrient(e.target.x, e.target.y, e.target.energy * 0.3);
+          e.target.dead = true;
+          e.target = null;
+        }
       }
     } else {
       // Wander
@@ -375,7 +390,7 @@ function stepAnimal(e) {
 // Prevent silent total extinction — respawn a few if a type completely disappears
 let extinctionTick = 0;
 function checkExtinction() {
-  if (extinctionTick++ % 300 !== 0) return;
+  if (extinctionTick++ % 200 !== 0) return;
   const c = [0, 0, 0];
   for (const e of entities) c[e.type]++;
   if (c[0] < 5)  for (let i = 0; i < 10; i++) entities.push(spawnRandom(TYPE.PLANT));
