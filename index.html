@@ -75,6 +75,9 @@
   <button class="btn-speed active" id="speed1">1×</button>
   <button class="btn-speed"        id="speed2">2×</button>
   <button class="btn-speed"        id="speed4">4×</button>
+  <button class="btn-speed"        id="speed8">8×</button>
+  <button class="btn-speed"        id="speed16">16×</button>
+  <button class="btn-speed"        id="speed32">32×</button>
   <div class="sep"></div>
   <button class="btn-pause" id="btnPause">⏸ Pause</button>
   <button class="btn-clear" id="btnClear">✕ Clear</button>
@@ -930,12 +933,13 @@ function updateStats() {
 // ── Loop ──────────────────────────────────────────────────────────────────────
 let paused=false, simSpeed=1;
 
+let _frameN=0;
 function loop() {
   if(!paused){
     for(let i=0;i<simSpeed;i++) step();
     recordHistory();
-    draw();
-    updateStats();
+    const drawEvery=simSpeed>=16?3:simSpeed>=8?2:1;
+    if(++_frameN%drawEvery===0){ draw(); updateStats(); }
   }
   requestAnimationFrame(loop);
 }
@@ -958,9 +962,12 @@ Object.entries(TYPE_BTNS).forEach(([id,type])=>{
 
 // Speed buttons
 const speedBtns=[
-  [document.getElementById('speed1'),1],
-  [document.getElementById('speed2'),2],
-  [document.getElementById('speed4'),4],
+  [document.getElementById('speed1'), 1],
+  [document.getElementById('speed2'), 2],
+  [document.getElementById('speed4'), 4],
+  [document.getElementById('speed8'), 8],
+  [document.getElementById('speed16'),16],
+  [document.getElementById('speed32'),32],
 ];
 speedBtns.forEach(([btn,spd])=>{
   btn.addEventListener('click',()=>{
