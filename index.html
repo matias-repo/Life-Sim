@@ -58,7 +58,8 @@
   #stats .s-plant  { color: #2a4a2a; }
   #stats .s-grazer { color: #1a3a5a; }
   #stats .s-hunter { color: #4a2a18; }
-  #stats .s-gen    { color: #3a3040; }
+  .btn-heat { color: #688; border-color: #222; }
+  .btn-heat.active { color: #f8c; border-color: #f8c; background: rgba(255,136,204,0.12); }
 </style>
 </head>
 <body>
@@ -77,6 +78,8 @@
   <div class="sep"></div>
   <button class="btn-pause" id="btnPause">⏸ Pause</button>
   <button class="btn-clear" id="btnClear">✕ Clear</button>
+  <div class="sep"></div>
+  <button class="btn-heat"  id="btnHeat">◉ Heat</button>
 </div>
 
 <div id="stats">
@@ -427,7 +430,7 @@ function stepAnimal(e) {
           const kickDmg=e.target.genes.size*(e.target.genes.aggression??0)*0.44;
           e.energy-=kickDmg;
           if(kickDmg>1.5) e.hitTimer=25;
-          if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2); e.dead=true; e.target=null; return; }
+          if(e.energy<=0){ logEvt('hunter kicked to death!','#f84'); addNutrient(e.x,e.y,g.size*2); e.dead=true; e.target=null; return; }
           e.energy=Math.min(e.maxEnergy,e.energy+e.target.energy*(0.55+g.aggression*0.12));
           addNutrient(e.target.x,e.target.y,e.target.energy*0.3);
           e.target.dead=true; e.target=null;
@@ -457,12 +460,13 @@ function stepAnimal(e) {
 }
 
 function checkExtinction() {
-  if(popCount[0]<5)   for(let i=0;i<12;i++) entities.push(spawnRandom(TYPE.PLANT));
-  if(popCount[1]===0) for(let i=0;i< 5;i++) entities.push(spawnRandom(TYPE.GRAZER));
-  if(popCount[2]===0)                        entities.push(spawnRandom(TYPE.HUNTER));
+  if(popCount[0]<5)   { logEvt('plants near extinction!','#4a4'); for(let i=0;i<12;i++) entities.push(spawnRandom(TYPE.PLANT)); }
+  if(popCount[1]===0) { logEvt('grazers extinct — respawning','#4af'); for(let i=0;i< 5;i++) entities.push(spawnRandom(TYPE.GRAZER)); }
+  if(popCount[2]===0) { logEvt('hunters extinct — respawning','#f52'); entities.push(spawnRandom(TYPE.HUNTER)); }
 }
 
 function step() {
+  tick++;
   buildGrid(); newborns=[];
   for(const e of entities){ if(e.dead) continue; e.age++; (e.type===TYPE.PLANT?stepPlant:stepAnimal)(e); }
   nutrients=nutrients.filter(n=>{n.amount*=0.997;return n.amount>0.7;});
@@ -474,6 +478,7 @@ function step() {
   }
   entities.push(...newborns);
   checkExtinction();
+  checkMilestones();
 }
 
 // ── Population history (for graph) ────────────────────────────────────────────
@@ -481,6 +486,58 @@ const HISTORY_LEN = 400;
 let history = [];  // recorded once per frame
 let maxGeneration = 0;
 let maxGenByType  = [0, 0, 0];
+
+// ── Event log ─────────────────────────────────────────────────────────────────
+let tick = 0;
+const eventLog = [];
+const milestoneHit = {};
+let lastLoggedGen = 0;
+const LOG_MAX = 8;
+
+const GENE_MILESTONES = [
+  { type:TYPE.PLANT,  gene:'toxicity',        marks:[0.35,0.65,0.88], label:'plant toxin',   color:'#c06fe0' },
+  { type:TYPE.GRAZER, gene:'camouflage',       marks:[0.30,0.60,0.82], label:'grazer camo',   color:'#80c8a0' },
+  { type:TYPE.GRAZER, gene:'poisonResistance', marks:[0.45,0.78],      label:'grazer resist', color:'#b06aff' },
+  { type:TYPE.GRAZER, gene:'stamina',          marks:[1.7, 2.3],       label:'grazer stamina',color:'#ffd040' },
+  { type:TYPE.HUNTER, gene:'speed',            marks:[2.4, 3.1],       label:'hunter speed',  color:'#f84'    },
+  { type:TYPE.HUNTER, gene:'aggression',       marks:[0.88],           label:'hunter aggr',   color:'#f44'    },
+];
+
+function logEvt(msg, color='#8a8') {
+  eventLog.push({ msg, color, tick });
+  if(eventLog.length > LOG_MAX) eventLog.shift();
+}
+
+function checkMilestones() {
+  if(tick%300!==0) return;
+  const genMark=Math.floor(maxGeneration/100)*100;
+  if(genMark>0 && genMark>lastLoggedGen){ logEvt(`gen ${genMark} reached`,'#555'); lastLoggedGen=genMark; }
+  for(const m of GENE_MILESTONES){
+    const pool=entities.filter(e=>!e.dead&&e.type===m.type);
+    if(!pool.length) continue;
+    const maxVal=pool.reduce((b,e)=>Math.max(b,e.genes[m.gene]??0),0);
+    for(const mark of m.marks){
+      const key=`${m.type}_${m.gene}_${mark}`;
+      if(maxVal>=mark&&!milestoneHit[key]){ milestoneHit[key]=true; logEvt(`${m.label} → ${maxVal.toFixed(2)}`,m.color); }
+    }
+  }
+}
+
+// ── Trait heatmap ─────────────────────────────────────────────────────────────
+let heatmap = 0;
+const HEATMAP_MODES = [
+  null,
+  { name:'speed',  types:[TYPE.GRAZER,TYPE.HUNTER],            gene:'speed',           lo:0.3, hi:3.6  },
+  { name:'size',   types:[TYPE.PLANT,TYPE.GRAZER,TYPE.HUNTER], gene:'size',            lo:2.0, hi:13.0 },
+  { name:'aggr',   types:[TYPE.GRAZER,TYPE.HUNTER],            gene:'aggression',      lo:0,   hi:1.0  },
+  { name:'toxin',  types:[TYPE.PLANT],                         gene:'toxicity',        lo:0,   hi:1.0  },
+  { name:'camo',   types:[TYPE.GRAZER],                        gene:'camouflage',      lo:0,   hi:0.9  },
+];
+
+function heatColor(val, lo, hi) {
+  const t=clamp((val-lo)/(hi-lo),0,1);
+  return [Math.round(240-t*240), 90, Math.round(42+t*14)]; // [h,s,l]
+}
 
 function recordHistory() {
   history.push({ p: popCount[0], g: popCount[1], h: popCount[2] });
@@ -536,9 +593,14 @@ function draw() {
     const ps=Math.max(1.5, g.size*0.40)*(immature?0.65:1); // pixel block size
     const camoFade=t===TYPE.GRAZER?1-(g.camouflage??0)*0.55:1;
 
+    // Heatmap override
+    const hm=heatmap>0?HEATMAP_MODES[heatmap]:null;
+    const hmActive=hm&&hm.types.includes(t);
+    const hmHSL=hmActive?heatColor(g[hm.gene]??0,hm.lo,hm.hi):null;
+
     // Soft glow behind the sprite
     ctx.globalAlpha=(immature?0.05:(t===TYPE.PLANT?0.09:er>0.7?0.07+(er-0.7)*0.28:0.07))*camoFade;
-    ctx.fillStyle=geneColor(t,g,er);
+    ctx.fillStyle=hmHSL?`hsl(${hmHSL[0]},${hmHSL[1]}%,${hmHSL[2]}%)`:geneColor(t,g,er);
     ctx.beginPath(); ctx.arc(e.x,e.y,g.size*1.9,0,Math.PI*2); ctx.fill();
 
     // Pixel art body
@@ -559,9 +621,14 @@ function draw() {
       } else {
         h=g.hue; s=58+(g.aggression??0)*30; lBase=28+er*32;
       }
-      const l=shade===2?lBase+14:shade===1?lBase:Math.max(8,lBase-13);
       ctx.globalAlpha=(immature?0.58:0.90+er*0.10)*camoFade;
-      ctx.fillStyle=`hsl(${h.toFixed(0)},${s.toFixed(0)}%,${l.toFixed(0)}%)`;
+      if(hmHSL){
+        const l=shade===2?hmHSL[2]+16:shade===1?hmHSL[2]:Math.max(8,hmHSL[2]-12);
+        ctx.fillStyle=`hsl(${hmHSL[0]},90%,${l}%)`;
+      } else {
+        const l=shade===2?lBase+14:shade===1?lBase:Math.max(8,lBase-13);
+        ctx.fillStyle=`hsl(${h.toFixed(0)},${s.toFixed(0)}%,${l.toFixed(0)}%)`;
+      }
       ctx.fillRect(dx*ps-ps*0.5, dy*ps-ps*0.5, ps, ps);
     }
     ctx.restore();
@@ -616,6 +683,36 @@ function draw() {
 
   if(inspected&&!inspected.dead) drawInspect(inspected);
   drawGraph();
+  drawEventLog();
+  drawHeatmapLabel();
+}
+
+function drawEventLog() {
+  if(!eventLog.length) return;
+  const lh=15, pad=8, LW=248;
+  const LH=eventLog.length*lh+pad;
+  const LX=10, LY=canvas.height-10;
+  ctx.fillStyle='rgba(2,2,10,0.78)';
+  ctx.fillRect(LX,LY-LH,LW,LH);
+  ctx.font='9px monospace';
+  eventLog.forEach((ev,i)=>{
+    const age=tick-ev.tick;
+    ctx.globalAlpha=age<600?0.88:Math.max(0.18,0.88-(age-600)/600);
+    ctx.fillStyle=ev.color;
+    ctx.fillText(`◆ ${ev.msg}`,LX+6,LY-LH+lh*(i+1));
+  });
+  ctx.globalAlpha=1;
+}
+
+function drawHeatmapLabel() {
+  if(!heatmap) return;
+  const hm=HEATMAP_MODES[heatmap];
+  const lx=canvas.width/2-72;
+  ctx.fillStyle='rgba(2,2,10,0.80)'; ctx.fillRect(lx,4,144,18);
+  ctx.globalAlpha=0.88; ctx.font='10px monospace';
+  ctx.fillStyle='#f8c';
+  ctx.fillText(`heatmap: ${hm.name}   [H] cycle`,lx+5,17);
+  ctx.globalAlpha=1;
 }
 
 // ── Population graph ───────────────────────────────────────────────────────────
@@ -863,9 +960,22 @@ document.getElementById('btnPause').addEventListener('click',()=>{
 });
 
 document.getElementById('btnClear').addEventListener('click',()=>{
-  entities=[]; nutrients=[]; spores=[]; history=[]; inspected=null; maxGeneration=0; maxGenByType=[0,0,0]; geneBank=[[],[],[]];
+  entities=[]; nutrients=[]; spores=[]; history=[]; inspected=null;
+  maxGeneration=0; maxGenByType=[0,0,0]; geneBank=[[],[],[]];
+  eventLog.length=0; Object.keys(milestoneHit).forEach(k=>delete milestoneHit[k]); lastLoggedGen=0; tick=0;
   document.getElementById('st-gen').textContent='gen: 0';
   localStorage.removeItem(SAVE_KEY);
+});
+
+const btnHeat=document.getElementById('btnHeat');
+function cycleHeatmap(){
+  heatmap=(heatmap+1)%HEATMAP_MODES.length;
+  btnHeat.classList.toggle('active',heatmap>0);
+  btnHeat.textContent=heatmap>0?`◉ ${HEATMAP_MODES[heatmap].name}`:'◉ Heat';
+}
+btnHeat.addEventListener('click',cycleHeatmap);
+document.addEventListener('keydown',ev=>{
+  if(ev.key==='h'||ev.key==='H') cycleHeatmap();
 });
 
 // ── Persistence ───────────────────────────────────────────────────────────────
