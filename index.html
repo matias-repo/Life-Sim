@@ -206,10 +206,17 @@ function spawnOffspring(parent) {
   return child;
 }
 function spawnRandom(type) {
+  const bank = geneBank[type];
+  let genes = null, gen = maxGenByType[type];
+  if(bank.length > 0){
+    const src = bank[Math.floor(Math.random()*bank.length)];
+    genes = mutateGenes(src.genes, type);
+    gen   = Math.max(gen, src.generation);
+  }
   return createEntity(type,
     Math.random()*(canvas.width-20)+10,
     Math.random()*(canvas.height-20)+10,
-    null, maxGenByType[type]);
+    genes, gen);
 }
 
 let entities=[];
@@ -249,6 +256,16 @@ const MAX_NUTRIENTS=80;
 let nutrients=[];
 function addNutrient(x,y,amount) {
   if(nutrients.length<MAX_NUTRIENTS) nutrients.push({x,y,amount});
+}
+
+// ── Gene bank (persists evolved traits through extinction) ────────────────────
+const GENE_BANK_SIZE = 30;
+let geneBank = [[], [], []];
+
+function archiveGenes(e) {
+  const bank = geneBank[e.type];
+  bank.push({ genes: Object.assign({}, e.genes), generation: e.generation });
+  if(bank.length > GENE_BANK_SIZE) bank.shift();
 }
 
 // ── Spores ────────────────────────────────────────────────────────────────────
@@ -404,7 +421,7 @@ function step() {
   buildGrid(); newborns=[];
   for(const e of entities){ if(e.dead) continue; e.age++; (e.type===TYPE.PLANT?stepPlant:stepAnimal)(e); }
   nutrients=nutrients.filter(n=>{n.amount*=0.997;return n.amount>0.7;});
-  entities=entities.filter(e=>!e.dead);
+  entities=entities.filter(e=>{ if(e.dead) archiveGenes(e); return !e.dead; });
   stepSpores();
   for(const e of newborns){
     if(e.generation>maxGeneration) maxGeneration=e.generation;
@@ -746,7 +763,7 @@ document.getElementById('btnPause').addEventListener('click',()=>{
 });
 
 document.getElementById('btnClear').addEventListener('click',()=>{
-  entities=[]; nutrients=[]; spores=[]; history=[]; inspected=null; maxGeneration=0; maxGenByType=[0,0,0];
+  entities=[]; nutrients=[]; spores=[]; history=[]; inspected=null; maxGeneration=0; maxGenByType=[0,0,0]; geneBank=[[],[],[]];
   document.getElementById('st-gen').textContent='gen: 0';
   localStorage.removeItem(SAVE_KEY);
 });
