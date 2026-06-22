@@ -6,56 +6,107 @@
 <title>Biosphere</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #07070f; color: #ccc; font-family: monospace;
-         display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
-  h1 { font-size: 0.9rem; letter-spacing: 5px; padding: 6px 0; color: #4af; opacity: 0.6; flex-shrink: 0; }
+  body {
+    background: #07070f; color: #ccc; font-family: monospace;
+    display: flex; flex-direction: column; align-items: center;
+    height: 100vh; overflow: hidden; user-select: none;
+  }
+
+  h1 { font-size: 0.85rem; letter-spacing: 6px; padding: 5px 0 3px;
+       color: #4af; opacity: 0.55; flex-shrink: 0; }
+
   #world { display: block; cursor: crosshair; flex-shrink: 0; }
-  #ui { display: flex; gap: 8px; padding: 6px; flex-wrap: wrap; justify-content: center; flex-shrink: 0; }
-  button { padding: 5px 13px; border: 1px solid; border-radius: 3px; background: transparent;
-           font-family: monospace; font-size: 0.78rem; cursor: pointer; transition: background 0.12s; }
-  .btn-plant  { color: #4c4; border-color: #4c4; } .btn-plant:hover  { background: #4c41; }
-  .btn-grazer { color: #4af; border-color: #4af; } .btn-grazer:hover { background: #4af1; }
-  .btn-hunter { color: #f64; border-color: #f64; } .btn-hunter:hover { background: #f641; }
-  .btn-clear  { color: #666; border-color: #444; } .btn-clear:hover  { background: #2221; }
-  .btn-pause  { color: #fa4; border-color: #fa4; }
-  #stats { font-size: 0.72rem; color: #444; padding: 2px 8px; letter-spacing: 1px; flex-shrink: 0; }
+
+  /* ── Toolbar ──────────────────────────────────────────── */
+  #ui {
+    display: flex; align-items: center; gap: 5px;
+    padding: 5px 8px; flex-wrap: wrap; justify-content: center; flex-shrink: 0;
+  }
+  .sep { width: 1px; height: 22px; background: #1e1e2e; margin: 0 3px; flex-shrink: 0; }
+
+  button {
+    padding: 4px 12px; border: 1px solid; border-radius: 3px;
+    background: transparent; font-family: monospace; font-size: 0.76rem;
+    cursor: pointer; transition: background 0.12s, opacity 0.12s;
+    flex-shrink: 0;
+  }
+  button:hover { filter: brightness(1.25); }
+
+  /* Spawn buttons */
+  .btn-plant  { color: #4c4; border-color: #2a4a2a; }
+  .btn-grazer { color: #4af; border-color: #1a3a5a; }
+  .btn-hunter { color: #f64; border-color: #5a2a1a; }
+  .btn-plant.active  { background: rgba(68,204,68, 0.18); border-color: #4c4; }
+  .btn-grazer.active { background: rgba(68,170,255,0.18); border-color: #4af; }
+  .btn-hunter.active { background: rgba(255,102,68, 0.18); border-color: #f64; }
+
+  /* Speed buttons */
+  .btn-speed { color: #555; border-color: #1e1e2e; font-size: 0.72rem; padding: 4px 9px; }
+  .btn-speed.active { color: #fa4; border-color: #fa4; background: rgba(255,170,68,0.12); }
+
+  /* Util buttons */
+  .btn-pause { color: #888; border-color: #333; }
+  .btn-pause.paused { color: #fa4; border-color: #fa4; }
+  .btn-clear { color: #555; border-color: #222; }
+
+  /* ── Stats ────────────────────────────────────────────── */
+  #stats {
+    font-size: 0.68rem; color: #383848; padding: 1px 8px 4px;
+    letter-spacing: 0.5px; flex-shrink: 0;
+  }
+  #stats span { margin-right: 14px; }
+  #stats .s-plant  { color: #2a4a2a; }
+  #stats .s-grazer { color: #1a3a5a; }
+  #stats .s-hunter { color: #4a2a18; }
+  #stats .s-gen    { color: #3a3040; }
 </style>
 </head>
 <body>
+
 <h1>B I O S P H E R E</h1>
 <canvas id="world"></canvas>
+
 <div id="ui">
   <button class="btn-plant"  id="selPlant">+ Plant</button>
   <button class="btn-grazer" id="selGrazer">+ Grazer</button>
   <button class="btn-hunter" id="selHunter">+ Hunter</button>
-  <button class="btn-pause"  id="btnPause">Pause</button>
-  <button class="btn-clear"  id="btnClear">Clear</button>
+  <div class="sep"></div>
+  <button class="btn-speed active" id="speed1">1×</button>
+  <button class="btn-speed"        id="speed2">2×</button>
+  <button class="btn-speed"        id="speed4">4×</button>
+  <div class="sep"></div>
+  <button class="btn-pause" id="btnPause">⏸ Pause</button>
+  <button class="btn-clear" id="btnClear">✕ Clear</button>
 </div>
-<div id="stats">–</div>
+
+<div id="stats">
+  <span class="s-plant"  id="st-plants">plants: –</span>
+  <span class="s-grazer" id="st-grazers">grazers: –</span>
+  <span class="s-hunter" id="st-hunters">hunters: –</span>
+  <span class="s-gen"    id="st-gen">gen: 0</span>
+</div>
 
 <script>
 const canvas = document.getElementById('world');
 const ctx = canvas.getContext('2d');
 
-// Defer sizing until the browser has laid out the page so offsetHeight is accurate
 function resize() {
-  const h1H    = document.querySelector('h1').offsetHeight    || 28;
-  const uiH    = document.getElementById('ui').offsetHeight   || 44;
-  const statsH = document.getElementById('stats').offsetHeight || 22;
+  const h1H    = document.querySelector('h1').offsetHeight    || 26;
+  const uiH    = document.getElementById('ui').offsetHeight   || 42;
+  const statsH = document.getElementById('stats').offsetHeight || 20;
   canvas.width  = Math.min(window.innerWidth - 2, 960);
-  canvas.height = Math.max(window.innerHeight - h1H - uiH - statsH - 16, 280);
+  canvas.height = Math.max(window.innerHeight - h1H - uiH - statsH - 14, 260);
 }
 window.addEventListener('resize', resize);
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// ── Types & constants ──────────────────────────────────────────────────────────
 const TYPE = { PLANT: 0, GRAZER: 1, HUNTER: 2 };
 
-// Gene spec: { name: [default, min, max] }
 const GENE_SPEC = {
   [TYPE.PLANT]: {
     growthRate:   [0.11,  0.02,  0.30 ],
     size:         [4.0,   2.0,   9.0  ],
-    spreadChance: [0.003, 0.0004,0.010],  // raised: plants must keep up with grazers
+    spreadChance: [0.003, 0.0004,0.010],
     mutationRate: [0.08,  0.01,  0.50 ],
     hue:          [120,   72,    162  ],
   },
@@ -82,462 +133,514 @@ const GENE_SPEC = {
 };
 
 const EP = {
-  [TYPE.PLANT]:  { start: 65,  maxBase: 120, repBase: 76,  costBase: 45 },  // repBase lowered: plants spread sooner
+  [TYPE.PLANT]:  { start: 65,  maxBase: 120, repBase: 76,  costBase: 45 },
   [TYPE.GRAZER]: { start: 80,  maxBase: 185, repBase: 148, costBase: 65 },
   [TYPE.HUNTER]: { start: 100, maxBase: 255, repBase: 210, costBase: 90 },
 };
 
-const SIZE_DEF  = { [TYPE.PLANT]: 4, [TYPE.GRAZER]: 5, [TYPE.HUNTER]: 6 };
+const SIZE_DEF     = { [TYPE.PLANT]: 4, [TYPE.GRAZER]: 5, [TYPE.HUNTER]: 6 };
 const MAX_ENTITIES = 450;
-// Per-species soft caps prevent one type from crowding out others
-const MAX_POP   = [260, 160, 45];
+const MAX_POP      = [260, 160, 45];
 
-// ── Math helpers ───────────────────────────────────────────────────────────────
+// ── Math ───────────────────────────────────────────────────────────────────────
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
-
 function gauss() {
-  let u = 0, v = 0;
-  while (!u) u = Math.random();
-  while (!v) v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  let u=0,v=0;
+  while(!u) u=Math.random(); while(!v) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
 }
-
-function dist2(a, b) { const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
-function dist(a, b)  { return Math.sqrt(dist2(a,b)); }
+function dist2(a,b){const dx=a.x-b.x,dy=a.y-b.y;return dx*dx+dy*dy;}
+function dist(a,b){return Math.sqrt(dist2(a,b));}
 
 // ── Genes ──────────────────────────────────────────────────────────────────────
 function defaultGenes(type) {
-  const g = {};
-  for (const [k, [def]] of Object.entries(GENE_SPEC[type])) g[k] = def;
+  const g={};
+  for(const [k,[def]] of Object.entries(GENE_SPEC[type])) g[k]=def;
   return g;
 }
-
-function mutateGenes(parentGenes, type) {
-  const spec = GENE_SPEC[type];
-  const mr   = parentGenes.mutationRate;
-  const child = {};
-  for (const [k, [, lo, hi]] of Object.entries(spec)) {
-    const pv = parentGenes[k];
-    if (k === 'mutationRate') {
-      child[k] = clamp(pv + gauss() * 0.016, lo, hi);
-    } else if (k === 'hue') {
-      child[k] = clamp(pv + gauss() * mr * 38, lo, hi);
-    } else {
-      child[k] = clamp(pv * (1 + gauss() * mr * 0.5), lo, hi);
-    }
+function mutateGenes(pg, type) {
+  const spec=GENE_SPEC[type], mr=pg.mutationRate, child={};
+  for(const [k,[,lo,hi]] of Object.entries(spec)) {
+    const pv=pg[k];
+    if(k==='mutationRate') child[k]=clamp(pv+gauss()*0.016,lo,hi);
+    else if(k==='hue')     child[k]=clamp(pv+gauss()*mr*38,lo,hi);
+    else                   child[k]=clamp(pv*(1+gauss()*mr*0.5),lo,hi);
   }
   return child;
 }
 
 // ── Derived stats ──────────────────────────────────────────────────────────────
-function energyMax(type, g)    { return EP[type].maxBase  * (g.size / SIZE_DEF[type]); }
-function repThreshold(type, g) { return EP[type].repBase  * (g.size / SIZE_DEF[type]) / (g.fertility ?? 1); }
-function repCost(type, g)      { return EP[type].costBase * (g.size / SIZE_DEF[type]); }
-function metabolicRate(g)      { return (g.speed*g.speed*0.016 + g.size*0.0024 + 0.005) * g.metabolism; }
+function energyMax(t,g)    { return EP[t].maxBase *(g.size/SIZE_DEF[t]); }
+function repThreshold(t,g) { return EP[t].repBase *(g.size/SIZE_DEF[t])/(g.fertility??1); }
+function repCost(t,g)      { return EP[t].costBase*(g.size/SIZE_DEF[t]); }
+function metabolicRate(g)  { return (g.speed*g.speed*0.016+g.size*0.0024+0.005)*g.metabolism; }
 
-function geneColor(type, g, energyRatio) {
-  if (type === TYPE.PLANT) {
-    return `hsl(${g.hue},58%,${(20 + energyRatio*24).toFixed(0)}%)`;
-  }
-  return `hsl(${g.hue},${(58+g.aggression*30).toFixed(0)}%,${(28+energyRatio*30).toFixed(0)}%)`;
+function geneColor(type,g,er) {
+  if(type===TYPE.PLANT) return `hsl(${g.hue},58%,${(20+er*24).toFixed(0)}%)`;
+  return `hsl(${g.hue},${(58+g.aggression*30).toFixed(0)}%,${(28+er*30).toFixed(0)}%)`;
 }
 
 // ── Entities ───────────────────────────────────────────────────────────────────
-let idCounter = 0;
-
-function createEntity(type, x, y, genes = null, generation = 0) {
-  const g = genes ?? defaultGenes(type);
-  return {
-    id: idCounter++, type, x, y,
-    vx: (Math.random()-0.5)*0.4, vy: (Math.random()-0.5)*0.4,
-    genes: g,
-    energy: EP[type].start,
-    maxEnergy: energyMax(type, g),
-    age: 0, dead: false, target: null, generation, fleeing: false,
-  };
+let idCounter=0;
+function createEntity(type,x,y,genes=null,generation=0) {
+  const g=genes??defaultGenes(type);
+  return { id:idCounter++, type, x, y,
+    vx:(Math.random()-0.5)*0.4, vy:(Math.random()-0.5)*0.4,
+    genes:g, energy:EP[type].start, maxEnergy:energyMax(type,g),
+    age:0, dead:false, target:null, generation, fleeing:false };
 }
-
 function spawnOffspring(parent) {
-  const t = parent.type;
-  const g = mutateGenes(parent.genes, t);
-  const angle = Math.random() * Math.PI * 2;
-  const d = parent.genes.size * 3.5;
-  const x = clamp(parent.x + Math.cos(angle)*d, 5, canvas.width -5);
-  const y = clamp(parent.y + Math.sin(angle)*d, 5, canvas.height-5);
-  const child = createEntity(t, x, y, g, parent.generation+1);
-  child.maxEnergy = energyMax(t, g);
-  child.energy    = EP[t].start * 0.6;
+  const t=parent.type, g=mutateGenes(parent.genes,t);
+  const angle=Math.random()*Math.PI*2, d=parent.genes.size*3.5;
+  const x=clamp(parent.x+Math.cos(angle)*d,5,canvas.width-5);
+  const y=clamp(parent.y+Math.sin(angle)*d,5,canvas.height-5);
+  const child=createEntity(t,x,y,g,parent.generation+1);
+  child.maxEnergy=energyMax(t,g); child.energy=EP[t].start*0.6;
   return child;
 }
-
 function spawnRandom(type) {
   return createEntity(type,
-    Math.random()*(canvas.width -20)+10,
-    Math.random()*(canvas.height-20)+10,
-  );
+    Math.random()*(canvas.width-20)+10,
+    Math.random()*(canvas.height-20)+10);
 }
 
-let entities = [];
-
+let entities=[];
 function seed() {
-  for (let i = 0; i < 55; i++) entities.push(spawnRandom(TYPE.PLANT));
-  for (let i = 0; i < 12; i++) entities.push(spawnRandom(TYPE.GRAZER));
-  for (let i = 0; i <  2; i++) entities.push(spawnRandom(TYPE.HUNTER));
+  for(let i=0;i<55;i++) entities.push(spawnRandom(TYPE.PLANT));
+  for(let i=0;i<12;i++) entities.push(spawnRandom(TYPE.GRAZER));
+  for(let i=0;i< 2;i++) entities.push(spawnRandom(TYPE.HUNTER));
 }
 
-// ── Spatial grid + population count ───────────────────────────────────────────
-const CELL = 80;
-let grid = {};
-let popCount = [0, 0, 0];  // live count per type, updated each tick in buildGrid
+// ── Grid ───────────────────────────────────────────────────────────────────────
+const CELL=80;
+let grid={};
+let popCount=[0,0,0];
 
 function buildGrid() {
-  grid = {};
-  popCount[0] = popCount[1] = popCount[2] = 0;
-  for (const e of entities) {
-    if (e.dead) continue;
+  grid={}; popCount[0]=popCount[1]=popCount[2]=0;
+  for(const e of entities) {
+    if(e.dead) continue;
     popCount[e.type]++;
-    const k = `${Math.floor(e.x/CELL)}_${Math.floor(e.y/CELL)}`;
-    if (!grid[k]) grid[k] = [];
+    const k=`${Math.floor(e.x/CELL)}_${Math.floor(e.y/CELL)}`;
+    if(!grid[k]) grid[k]=[];
     grid[k].push(e);
   }
 }
-
-function nearby(x, y, r) {
-  const out = [];
-  const cx = Math.floor(x/CELL), cy = Math.floor(y/CELL), cr = Math.ceil(r/CELL)+1;
-  for (let dx=-cr; dx<=cr; dx++)
-    for (let dy=-cr; dy<=cr; dy++) {
-      const b = grid[`${cx+dx}_${cy+dy}`];
-      if (b) for (const e of b) out.push(e);
+function nearby(x,y,r) {
+  const out=[], cx=Math.floor(x/CELL), cy=Math.floor(y/CELL), cr=Math.ceil(r/CELL)+1;
+  for(let dx=-cr;dx<=cr;dx++)
+    for(let dy=-cr;dy<=cr;dy++){
+      const b=grid[`${cx+dx}_${cy+dy}`];
+      if(b) for(const e of b) out.push(e);
     }
   return out;
 }
 
 // ── Nutrients ──────────────────────────────────────────────────────────────────
-const MAX_NUTRIENTS = 80;
-let nutrients = [];
-function addNutrient(x, y, amount) {
-  if (nutrients.length < MAX_NUTRIENTS) nutrients.push({ x, y, amount });
+const MAX_NUTRIENTS=80;
+let nutrients=[];
+function addNutrient(x,y,amount) {
+  if(nutrients.length<MAX_NUTRIENTS) nutrients.push({x,y,amount});
 }
 
 // ── Simulation ─────────────────────────────────────────────────────────────────
-let newborns = [];
+let newborns=[];
 
 function stepPlant(e) {
-  let bonus = 0;
-  for (const n of nutrients) {
-    const dx=e.x-n.x, dy=e.y-n.y, d2=dx*dx+dy*dy;
-    if (d2 < 1444) bonus += n.amount * (1 - Math.sqrt(d2)/38) * 0.5;  // 38² = 1444
+  let bonus=0;
+  for(const n of nutrients){
+    const dx=e.x-n.x,dy=e.y-n.y,d2=dx*dx+dy*dy;
+    if(d2<1444) bonus+=n.amount*(1-Math.sqrt(d2)/38)*0.5;
   }
-  e.energy = Math.min(e.maxEnergy, e.energy + e.genes.growthRate*(1+bonus));
-
-  if (e.age > 4000 + e.genes.size*800) {
-    addNutrient(e.x, e.y, e.genes.size*2.5);
-    e.dead = true; return;
-  }
-
-  const rt = repThreshold(TYPE.PLANT, e.genes);
-  const rc = repCost(TYPE.PLANT, e.genes);
-  if (popCount[TYPE.PLANT] < MAX_POP[TYPE.PLANT]
-      && entities.length + newborns.length < MAX_ENTITIES
-      && e.energy > rt && Math.random() < e.genes.spreadChance) {
-    e.energy -= rc;
-    newborns.push(spawnOffspring(e));
+  e.energy=Math.min(e.maxEnergy, e.energy+e.genes.growthRate*(1+bonus));
+  if(e.age>4000+e.genes.size*800){ addNutrient(e.x,e.y,e.genes.size*2.5); e.dead=true; return; }
+  const rt=repThreshold(TYPE.PLANT,e.genes), rc=repCost(TYPE.PLANT,e.genes);
+  if(popCount[TYPE.PLANT]<MAX_POP[TYPE.PLANT]
+    && entities.length+newborns.length<MAX_ENTITIES
+    && e.energy>rt && Math.random()<e.genes.spreadChance) {
+    e.energy-=rc; newborns.push(spawnOffspring(e));
   }
 }
 
 function stepAnimal(e) {
-  const g = e.genes, t = e.type;
+  const g=e.genes, t=e.type;
+  const lifespan=g.size*1800, ageFrac=e.age/lifespan;
+  if(ageFrac>=1){ addNutrient(e.x,e.y,g.size*2); e.dead=true; return; }
+  const speedMult=ageFrac>0.7?Math.max(0.2,1-(ageFrac-0.7)*2.2):1;
+  const effSpeed=g.speed*speedMult, canReproduce=ageFrac<0.78;
+  const eatType=t===TYPE.GRAZER?TYPE.PLANT:TYPE.GRAZER;
+  const predType=t===TYPE.GRAZER?TYPE.HUNTER:null;
 
-  const lifespan = g.size * 1800;
-  const ageFrac  = e.age / lifespan;
-  if (ageFrac >= 1) {
-    addNutrient(e.x, e.y, g.size*2);
-    e.dead = true; return;
-  }
-  const speedMult = ageFrac > 0.7 ? Math.max(0.2, 1-(ageFrac-0.7)*2.2) : 1;
-  const effSpeed  = g.speed * speedMult;
-  const canReproduce = ageFrac < 0.78;
-
-  const eatType  = t === TYPE.GRAZER ? TYPE.PLANT  : TYPE.GRAZER;
-  const predType = t === TYPE.GRAZER ? TYPE.HUNTER : null;
-
-  // Flee
-  e.fleeing = false;
-  if (predType !== null && g.aggression < 0.72) {
-    const fleeR  = g.senseRadius * (1.15 - g.aggression*0.45);
-    const threats = nearby(e.x, e.y, fleeR).filter(n => !n.dead && n.type === predType);
-    if (threats.length) {
-      const threat = threats.reduce((b,n) => dist2(e,n)<dist2(e,b)?n:b);
-      const d = dist(e, threat) || 1;
-      e.vx = (e.x-threat.x)/d * effSpeed;
-      e.vy = (e.y-threat.y)/d * effSpeed;
-      e.fleeing = true;
-      e.target  = null;
+  e.fleeing=false;
+  if(predType!==null && g.aggression<0.72){
+    const fleeR=g.senseRadius*(1.15-g.aggression*0.45);
+    const threats=nearby(e.x,e.y,fleeR).filter(n=>!n.dead&&n.type===predType);
+    if(threats.length){
+      const threat=threats.reduce((b,n)=>dist2(e,n)<dist2(e,b)?n:b);
+      const d=dist(e,threat)||1;
+      e.vx=(e.x-threat.x)/d*effSpeed; e.vy=(e.y-threat.y)/d*effSpeed;
+      e.fleeing=true; e.target=null;
     }
   }
 
-  if (!e.fleeing) {
-    const lostTarget = !e.target || e.target.dead
-                    || dist2(e, e.target) > (g.senseRadius*1.6)**2;
-    if (lostTarget) {
-      e.target = null;
-      const cands = nearby(e.x, e.y, g.senseRadius)
-        .filter(n => n!==e && !n.dead && n.type===eatType);
-      if (cands.length) e.target = cands.reduce((b,n) => dist2(e,n)<dist2(e,b)?n:b);
+  if(!e.fleeing){
+    const lost=!e.target||e.target.dead||dist2(e,e.target)>(g.senseRadius*1.6)**2;
+    if(lost){
+      e.target=null;
+      const cands=nearby(e.x,e.y,g.senseRadius).filter(n=>n!==e&&!n.dead&&n.type===eatType);
+      if(cands.length) e.target=cands.reduce((b,n)=>dist2(e,n)<dist2(e,b)?n:b);
     }
-
-    if (e.target && !e.target.dead) {
-      const d = dist(e, e.target) || 1;
-      const chaseR = g.senseRadius * (0.4 + g.aggression*0.75);
-      if (d < chaseR) {
-        e.vx = (e.target.x-e.x)/d * effSpeed;
-        e.vy = (e.target.y-e.y)/d * effSpeed;
-      } else {
-        e.target = null;
-      }
-
-      if (e.target && d < g.size + e.target.genes.size + 1.5) {
-        if (eatType === TYPE.PLANT) {
-          // Graze: bite a chunk — plant survives repeated bites, only dies when drained
-          const bite = Math.min(e.target.energy * 0.38, 26);
-          if (bite > 1) {
-            e.energy = Math.min(e.maxEnergy, e.energy + bite*(0.62+g.aggression*0.10));
-            e.target.energy -= bite;
-            if (e.target.energy < 5) {
-              addNutrient(e.target.x, e.target.y, e.target.energy);
-              e.target.dead = true;
-            }
-            e.target = null;
+    if(e.target&&!e.target.dead){
+      const d=dist(e,e.target)||1;
+      const chaseR=g.senseRadius*(0.4+g.aggression*0.75);
+      if(d<chaseR){ e.vx=(e.target.x-e.x)/d*effSpeed; e.vy=(e.target.y-e.y)/d*effSpeed; }
+      else         { e.target=null; }
+      if(e.target && d<g.size+e.target.genes.size+1.5){
+        if(eatType===TYPE.PLANT){
+          const bite=Math.min(e.target.energy*0.38,26);
+          if(bite>1){
+            e.energy=Math.min(e.maxEnergy,e.energy+bite*(0.62+g.aggression*0.10));
+            e.target.energy-=bite;
+            if(e.target.energy<5){ addNutrient(e.target.x,e.target.y,e.target.energy); e.target.dead=true; }
+            e.target=null;
           }
         } else {
-          // Kill: hunters consume entire prey
-          const gain = e.target.energy * (0.55+g.aggression*0.12);
-          e.energy = Math.min(e.maxEnergy, e.energy + gain);
-          addNutrient(e.target.x, e.target.y, e.target.energy*0.3);
-          e.target.dead = true;
-          e.target = null;
+          e.energy=Math.min(e.maxEnergy,e.energy+e.target.energy*(0.55+g.aggression*0.12));
+          addNutrient(e.target.x,e.target.y,e.target.energy*0.3);
+          e.target.dead=true; e.target=null;
         }
       }
     } else {
-      e.vx += (Math.random()-0.5)*0.33;
-      e.vy += (Math.random()-0.5)*0.33;
-      const spd = Math.sqrt(e.vx*e.vx+e.vy*e.vy);
-      if (spd > effSpeed*0.85) { const s=effSpeed*0.85/spd; e.vx*=s; e.vy*=s; }
+      e.vx+=(Math.random()-0.5)*0.33; e.vy+=(Math.random()-0.5)*0.33;
+      const spd=Math.sqrt(e.vx*e.vx+e.vy*e.vy);
+      if(spd>effSpeed*0.85){const s=effSpeed*0.85/spd;e.vx*=s;e.vy*=s;}
     }
   }
 
-  e.x += e.vx; e.y += e.vy;
+  e.x+=e.vx; e.y+=e.vy;
+  const r=g.size;
+  if(e.x<r)              {e.x=r;              e.vx*=-0.8;}
+  if(e.x>canvas.width-r) {e.x=canvas.width-r; e.vx*=-0.8;}
+  if(e.y<r)              {e.y=r;              e.vy*=-0.8;}
+  if(e.y>canvas.height-r){e.y=canvas.height-r;e.vy*=-0.8;}
 
-  const r = g.size;
-  if (e.x < r)              { e.x=r;              e.vx*=-0.8; }
-  if (e.x > canvas.width-r) { e.x=canvas.width-r; e.vx*=-0.8; }
-  if (e.y < r)              { e.y=r;              e.vy*=-0.8; }
-  if (e.y > canvas.height-r){ e.y=canvas.height-r; e.vy*=-0.8; }
+  e.energy-=metabolicRate(g);
+  if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2.5); e.dead=true; return; }
 
-  e.energy -= metabolicRate(g);
-  if (e.energy <= 0) {
-    addNutrient(e.x, e.y, g.size*2.5);
-    e.dead = true; return;
-  }
-
-  const rt = repThreshold(t, g);
-  const rc = repCost(t, g);
-  if (canReproduce
-      && popCount[t] < MAX_POP[t]
-      && entities.length + newborns.length < MAX_ENTITIES
-      && e.energy > rt) {
-    e.energy -= rc;
-    newborns.push(spawnOffspring(e));
+  const rt=repThreshold(t,g), rc=repCost(t,g);
+  if(canReproduce && popCount[t]<MAX_POP[t]
+    && entities.length+newborns.length<MAX_ENTITIES && e.energy>rt){
+    e.energy-=rc; newborns.push(spawnOffspring(e));
   }
 }
 
-// Runs every tick — cheap because popCount is already computed
 function checkExtinction() {
-  if (popCount[0] < 5)   for (let i=0; i<12; i++) entities.push(spawnRandom(TYPE.PLANT));
-  if (popCount[1] < 2)   for (let i=0; i< 6; i++) entities.push(spawnRandom(TYPE.GRAZER));
-  if (popCount[2] === 0)                           entities.push(spawnRandom(TYPE.HUNTER));
+  if(popCount[0]<5)   for(let i=0;i<12;i++) entities.push(spawnRandom(TYPE.PLANT));
+  if(popCount[1]<2)   for(let i=0;i< 6;i++) entities.push(spawnRandom(TYPE.GRAZER));
+  if(popCount[2]===0)                        entities.push(spawnRandom(TYPE.HUNTER));
 }
 
 function step() {
-  buildGrid();       // also resets popCount
-  newborns = [];
-  for (const e of entities) {
-    if (e.dead) continue;
-    e.age++;
-    if (e.type === TYPE.PLANT) stepPlant(e);
-    else stepAnimal(e);
-  }
-  nutrients = nutrients.filter(n => { n.amount *= 0.997; return n.amount > 0.7; });
-  entities  = entities.filter(e => !e.dead);
+  buildGrid(); newborns=[];
+  for(const e of entities){ if(e.dead) continue; e.age++; (e.type===TYPE.PLANT?stepPlant:stepAnimal)(e); }
+  nutrients=nutrients.filter(n=>{n.amount*=0.997;return n.amount>0.7;});
+  entities=entities.filter(e=>!e.dead);
+  for(const e of newborns) if(e.generation>maxGeneration) maxGeneration=e.generation;
   entities.push(...newborns);
   checkExtinction();
 }
 
-// ── Render ─────────────────────────────────────────────────────────────────────
-function draw() {
-  ctx.fillStyle = '#07070f';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+// ── Population history (for graph) ────────────────────────────────────────────
+const HISTORY_LEN = 400;
+let history = [];  // recorded once per frame
+let maxGeneration = 0;
 
-  for (const n of nutrients) {
-    if (n.amount < 2) continue;
-    const a = Math.min(0.20, n.amount/70*0.20);
-    ctx.globalAlpha = a;
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, Math.min(28, n.amount*0.35), 0, Math.PI*2);
-    ctx.fillStyle = '#3a8a44';
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  for (const e of entities) {
-    const r  = e.genes.size;
-    const er = Math.min(1, e.energy / e.maxEnergy);
-    const color = geneColor(e.type, e.genes, er);
-
-    const glowA = e.type===TYPE.PLANT ? 0.10 : (er>0.7 ? 0.08+(er-0.7)*0.35 : 0.08);
-    ctx.globalAlpha = glowA;
-    ctx.beginPath(); ctx.arc(e.x, e.y, r*2.3, 0, Math.PI*2);
-    ctx.fillStyle = color; ctx.fill();
-
-    ctx.globalAlpha = 0.82 + er*0.18;
-    ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2);
-    ctx.fillStyle = color; ctx.fill();
-
-    if (e.type === TYPE.HUNTER) {
-      ctx.globalAlpha = 0.55;
-      ctx.beginPath(); ctx.arc(e.x, e.y, r*0.4, 0, Math.PI*2);
-      ctx.fillStyle = `hsl(${e.genes.hue},100%,80%)`; ctx.fill();
-    }
-
-    if (e.type !== TYPE.PLANT) {
-      const bw = r*2.5;
-      ctx.globalAlpha = 0.55;
-      ctx.fillStyle = '#111';
-      ctx.fillRect(e.x-bw/2, e.y-r-5, bw, 2);
-      ctx.fillStyle = e.fleeing ? '#f84' : color;
-      ctx.fillRect(e.x-bw/2, e.y-r-5, bw*er, 2);
-    }
-  }
-  ctx.globalAlpha = 1;
-
-  if (inspected && !inspected.dead) drawInspect(inspected);
+function recordHistory() {
+  history.push({ p: popCount[0], g: popCount[1], h: popCount[2] });
+  if (history.length > HISTORY_LEN) history.shift();
 }
 
-// ── Inspect ────────────────────────────────────────────────────────────────────
+// ── Render ─────────────────────────────────────────────────────────────────────
+function draw() {
+  ctx.fillStyle='#07070f';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Nutrients
+  for(const n of nutrients){
+    if(n.amount<2) continue;
+    ctx.globalAlpha=Math.min(0.20,n.amount/70*0.20);
+    ctx.beginPath(); ctx.arc(n.x,n.y,Math.min(28,n.amount*0.35),0,Math.PI*2);
+    ctx.fillStyle='#3a8a44'; ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  // Entities
+  for(const e of entities){
+    const r=e.genes.size, er=Math.min(1,e.energy/e.maxEnergy);
+    const color=geneColor(e.type,e.genes,er);
+    const glowA=e.type===TYPE.PLANT?0.10:(er>0.7?0.08+(er-0.7)*0.35:0.08);
+    ctx.globalAlpha=glowA;
+    ctx.beginPath(); ctx.arc(e.x,e.y,r*2.3,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
+    ctx.globalAlpha=0.82+er*0.18;
+    ctx.beginPath(); ctx.arc(e.x,e.y,r,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
+    if(e.type===TYPE.HUNTER){
+      ctx.globalAlpha=0.55;
+      ctx.beginPath(); ctx.arc(e.x,e.y,r*0.4,0,Math.PI*2);
+      ctx.fillStyle=`hsl(${e.genes.hue},100%,80%)`; ctx.fill();
+    }
+    if(e.type!==TYPE.PLANT){
+      const bw=r*2.5;
+      ctx.globalAlpha=0.55;
+      ctx.fillStyle='#111'; ctx.fillRect(e.x-bw/2,e.y-r-5,bw,2);
+      ctx.fillStyle=e.fleeing?'#f84':color; ctx.fillRect(e.x-bw/2,e.y-r-5,bw*er,2);
+    }
+  }
+  ctx.globalAlpha=1;
+
+  if(inspected&&!inspected.dead) drawInspect(inspected);
+  drawGraph();
+}
+
+// ── Population graph ───────────────────────────────────────────────────────────
+function drawGraph() {
+  if (history.length < 2) return;
+  const GW=210, GH=72, GX=canvas.width-GW-10, GY=10, PAD=5;
+
+  // Background
+  ctx.fillStyle='rgba(2,2,10,0.82)';
+  ctx.fillRect(GX,GY,GW,GH);
+  ctx.strokeStyle='#181828'; ctx.lineWidth=1;
+  ctx.strokeRect(GX,GY,GW,GH);
+
+  // Grid lines
+  ctx.strokeStyle='#0e0e1e'; ctx.lineWidth=1;
+  for(let i=1;i<4;i++){
+    const y=GY+PAD+(i/4)*(GH-PAD*2);
+    ctx.beginPath(); ctx.moveTo(GX+PAD,y); ctx.lineTo(GX+GW-PAD,y); ctx.stroke();
+  }
+
+  // Plot each species normalized to its own MAX_POP (so all lines use full height)
+  const drawLine = (color, getter, maxVal, fillColor) => {
+    const vals = history.map(getter);
+    const mx   = Math.max(maxVal, 1);
+    const plotH = GH - PAD*2 - 14;  // leave room for labels at bottom
+    const plotW = GW - PAD*2;
+
+    // Filled area under the line
+    ctx.globalAlpha = 0.07;
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    ctx.moveTo(GX+PAD, GY+PAD+plotH);
+    for(let i=0;i<vals.length;i++){
+      const x = GX+PAD + (i/(HISTORY_LEN-1))*plotW;
+      const y = GY+PAD+plotH - (vals[i]/mx)*plotH;
+      ctx.lineTo(x,y);
+    }
+    ctx.lineTo(GX+PAD+plotW, GY+PAD+plotH);
+    ctx.closePath(); ctx.fill();
+
+    // Line
+    ctx.globalAlpha = 0.90;
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for(let i=0;i<vals.length;i++){
+      const x = GX+PAD + (i/(HISTORY_LEN-1))*plotW;
+      const y = GY+PAD+plotH - (vals[i]/mx)*plotH;
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha=1;
+  };
+
+  drawLine('#3a7a3a', e=>e.p, MAX_POP[0], '#3a7a3a');
+  drawLine('#4af',    e=>e.g, MAX_POP[1], '#4af');
+  drawLine('#f52',    e=>e.h, MAX_POP[2], '#f52');
+
+  // Current counts
+  const last = history[history.length-1];
+  ctx.font='9px monospace';
+  const items = [
+    ['#3a7a3a', `P ${last.p}`, 0],
+    ['#4af',    `G ${last.g}`, 44],
+    ['#f52',    `H ${last.h}`, 82],
+  ];
+  items.forEach(([col, text, ox]) => {
+    ctx.fillStyle=col; ctx.globalAlpha=0.9;
+    ctx.fillText(text, GX+PAD+ox, GY+GH-4);
+  });
+  ctx.globalAlpha=1;
+
+  // "history" label
+  ctx.fillStyle='#222'; ctx.font='8px monospace';
+  ctx.fillText('population', GX+GW-68, GY+10);
+}
+
+// ── Inspect panel ──────────────────────────────────────────────────────────────
 let inspected = null;
 
 function drawInspect(e) {
-  const r  = e.genes.size;
-  const er = Math.min(1, e.energy/e.maxEnergy);
-  const color = geneColor(e.type, e.genes, er);
+  const r=e.genes.size, er=Math.min(1,e.energy/e.maxEnergy);
+  const color=geneColor(e.type,e.genes,er);
 
+  // Selection ring
   ctx.save();
-  ctx.setLineDash([4,3]);
-  ctx.lineWidth = 1.5; ctx.strokeStyle = '#eee'; ctx.globalAlpha = 0.8;
-  ctx.beginPath(); ctx.arc(e.x, e.y, r+5, 0, Math.PI*2); ctx.stroke();
-  if (e.genes.senseRadius) {
-    ctx.lineWidth = 1; ctx.strokeStyle = color; ctx.globalAlpha = 0.18;
-    ctx.beginPath(); ctx.arc(e.x, e.y, e.genes.senseRadius, 0, Math.PI*2); ctx.stroke();
+  ctx.setLineDash([4,3]); ctx.lineWidth=1.5; ctx.strokeStyle='#eee'; ctx.globalAlpha=0.8;
+  ctx.beginPath(); ctx.arc(e.x,e.y,r+5,0,Math.PI*2); ctx.stroke();
+  if(e.genes.senseRadius){
+    ctx.lineWidth=1; ctx.strokeStyle=color; ctx.globalAlpha=0.15;
+    ctx.beginPath(); ctx.arc(e.x,e.y,e.genes.senseRadius,0,Math.PI*2); ctx.stroke();
   }
   ctx.restore();
 
-  const g = e.genes;
-  const panelH = e.type===TYPE.PLANT ? 136 : 174;
-  const px = Math.min(e.x+r+14, canvas.width -164);
-  const py = clamp(e.y-60, 8, canvas.height-panelH-8);
+  const g=e.genes, spec=GENE_SPEC[e.type];
+  const isAnimal=e.type!==TYPE.PLANT;
+  const panelH=isAnimal?176:142;
+  const px=Math.min(e.x+r+14, canvas.width-172);
+  const py=clamp(e.y-60, 8, canvas.height-panelH-8);
 
-  ctx.fillStyle = 'rgba(4,4,12,0.88)'; ctx.strokeStyle = '#1e1e2e'; ctx.lineWidth = 1;
-  ctx.fillRect(px,py,160,panelH); ctx.strokeRect(px,py,160,panelH);
+  ctx.fillStyle='rgba(3,3,11,0.92)'; ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=1;
+  ctx.fillRect(px,py,168,panelH); ctx.strokeRect(px,py,168,panelH);
 
-  ctx.font = '10px monospace';
-  let iy = py+14;
-  const line = (txt,col) => { ctx.fillStyle=col; ctx.fillText(txt,px+7,iy); iy+=13; };
+  let iy=py+14;
+  ctx.font='10px monospace';
 
-  line(['PLANT','GRAZER','HUNTER'][e.type], color);
-  line(`gen ${e.generation}  ·  age ${e.age}`, '#555');
-  line('──────────────────', '#222');
+  // Header
+  ctx.fillStyle=color;
+  ctx.fillText(['PLANT','GRAZER','HUNTER'][e.type], px+7, iy); iy+=13;
+  ctx.fillStyle='#444';
+  ctx.fillText(`gen ${e.generation}  ·  age ${e.age}`, px+7, iy); iy+=11;
+  ctx.fillStyle='#181828';
+  ctx.fillRect(px+7, iy, 154, 1); iy+=8;
 
-  if (e.type === TYPE.PLANT) {
-    line(`growth    ${g.growthRate.toFixed(3)}`, '#4b4');
-    line(`spread    ${g.spreadChance.toFixed(4)}`, '#4b4');
-    line(`size      ${g.size.toFixed(2)}`, '#aaa');
-    line(`mutRate   ${g.mutationRate.toFixed(3)}`, '#b84');
-    line(`hue       ${g.hue.toFixed(0)}°`, '#888');
+  // Gene rows with bar
+  const drawGeneRow = (label, val, lo, hi, col) => {
+    const frac=clamp((val-lo)/(hi-lo),0,1);
+    const bx=px+7, bw=66, bh=3, by=iy-4;
+    ctx.fillStyle='#121220'; ctx.fillRect(bx,by,bw,bh);
+    ctx.fillStyle=col; ctx.globalAlpha=0.75;
+    ctx.fillRect(bx,by,frac*bw,bh);
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#3a3a50'; ctx.font='9px monospace';
+    ctx.fillText(label, bx+bw+5, iy);
+    ctx.fillStyle=col;
+    ctx.fillText(val.toFixed(2), bx+bw+57, iy);
+    iy+=13;
+  };
+
+  ctx.font='9px monospace';
+  if(e.type===TYPE.PLANT){
+    drawGeneRow('growth',   g.growthRate,   ...spec.growthRate.slice(1),   '#4b4');
+    drawGeneRow('spread',   g.spreadChance, ...spec.spreadChance.slice(1), '#4b4');
+    drawGeneRow('size',     g.size,         ...spec.size.slice(1),          '#aaa');
+    drawGeneRow('mutRate',  g.mutationRate, ...spec.mutationRate.slice(1),  '#b84');
+    drawGeneRow('hue',      g.hue,          ...spec.hue.slice(1),           '#888');
   } else {
-    // Fixed: use actual lifespan formula (size*1800) not the old size*480
-    const agePct = ((e.age / (g.size*1800)) * 100).toFixed(0);
-    line(`speed     ${g.speed.toFixed(2)}`,       '#7af');
-    line(`sense     ${g.senseRadius.toFixed(1)}`, '#7af');
-    line(`size      ${g.size.toFixed(2)}`,         '#aaa');
-    line(`metab     ${g.metabolism.toFixed(2)}`,  '#fa6');
-    line(`fertility ${g.fertility.toFixed(2)}`,   '#4c4');
-    line(`aggr      ${g.aggression.toFixed(2)}`,  g.aggression>0.6?'#f64':'#48f');
-    line(`mutRate   ${g.mutationRate.toFixed(3)}`, '#b84');
-    line(`age       ${agePct}%`,                  '#555');
+    const ageFrac=e.age/(g.size*1800);
+    drawGeneRow('speed',   g.speed,        ...spec.speed.slice(1),        '#7af');
+    drawGeneRow('sense',   g.senseRadius,  ...spec.senseRadius.slice(1),  '#7af');
+    drawGeneRow('size',    g.size,         ...spec.size.slice(1),          '#aaa');
+    drawGeneRow('metab',   g.metabolism,   ...spec.metabolism.slice(1),   '#fa6');
+    drawGeneRow('fert',    g.fertility,    ...spec.fertility.slice(1),     '#4c4');
+    drawGeneRow('aggr',    g.aggression,   ...spec.aggression.slice(1),   g.aggression>0.6?'#f64':'#48f');
+    drawGeneRow('mutRate', g.mutationRate, ...spec.mutationRate.slice(1), '#b84');
+    // Age bar
+    const agCol=ageFrac>0.7?'#f84':'#444';
+    drawGeneRow('age',     ageFrac*100,    0, 100,                         agCol);
   }
 }
 
-// ── Stats ──────────────────────────────────────────────────────────────────────
-let tick = 0;
+// ── Stats bar ──────────────────────────────────────────────────────────────────
+let frameCount=0;
 function updateStats() {
-  if (tick++ % 20 !== 0) return;
-  document.getElementById('stats').textContent =
-    `plants: ${popCount[0]}  ·  grazers: ${popCount[1]}  ·  hunters: ${popCount[2]}  ·  total: ${entities.length}`;
+  if(frameCount++%20!==0) return;
+  document.getElementById('st-plants').textContent  = `plants: ${popCount[0]}`;
+  document.getElementById('st-grazers').textContent = `grazers: ${popCount[1]}`;
+  document.getElementById('st-hunters').textContent = `hunters: ${popCount[2]}`;
+  document.getElementById('st-gen').textContent     = `gen: ${maxGeneration}`;
 }
 
 // ── Loop ──────────────────────────────────────────────────────────────────────
-let paused = false;
+let paused=false, simSpeed=1;
+
 function loop() {
-  if (!paused) { step(); draw(); updateStats(); }
+  if(!paused){
+    for(let i=0;i<simSpeed;i++) step();
+    recordHistory();
+    draw();
+    updateStats();
+  }
   requestAnimationFrame(loop);
 }
 
 // ── Controls ───────────────────────────────────────────────────────────────────
-let selected = null;
-const TYPE_BTNS = { selPlant: TYPE.PLANT, selGrazer: TYPE.GRAZER, selHunter: TYPE.HUNTER };
-const btnEls = {};
+let selected=null;
+const TYPE_BTNS={ selPlant:TYPE.PLANT, selGrazer:TYPE.GRAZER, selHunter:TYPE.HUNTER };
+const btnEls={};
 
-Object.entries(TYPE_BTNS).forEach(([id, type]) => {
-  const btn = document.getElementById(id);
-  btnEls[id] = btn;
-  btn.addEventListener('click', () => {
-    selected = selected===type ? null : type;
-    Object.entries(btnEls).forEach(([bid,b]) =>
-      b.style.opacity = (selected===null||selected===TYPE_BTNS[bid]) ? '1' : '0.38'
-    );
+Object.entries(TYPE_BTNS).forEach(([id,type])=>{
+  const btn=document.getElementById(id);
+  btnEls[id]=btn;
+  btn.addEventListener('click',()=>{
+    const was=selected===type;
+    selected=was?null:type;
+    Object.values(btnEls).forEach(b=>b.classList.remove('active'));
+    if(!was) btn.classList.add('active');
   });
 });
 
-canvas.addEventListener('click', ev => {
-  const rect = canvas.getBoundingClientRect();
-  const mx = ev.clientX-rect.left, my = ev.clientY-rect.top;
-  const pt = {x:mx,y:my};
-  for (let i=entities.length-1; i>=0; i--) {
-    const e = entities[i];
-    if (!e.dead && dist(pt,e) < e.genes.size+6) {
-      inspected = inspected===e ? null : e; return;
+// Speed buttons
+const speedBtns=[
+  [document.getElementById('speed1'),1],
+  [document.getElementById('speed2'),2],
+  [document.getElementById('speed4'),4],
+];
+speedBtns.forEach(([btn,spd])=>{
+  btn.addEventListener('click',()=>{
+    simSpeed=spd;
+    speedBtns.forEach(([b])=>b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// Canvas click — inspect or place
+canvas.addEventListener('click', ev=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=ev.clientX-rect.left, my=ev.clientY-rect.top;
+  const pt={x:mx,y:my};
+
+  // Inspect
+  for(let i=entities.length-1;i>=0;i--){
+    const e=entities[i];
+    if(!e.dead && dist(pt,e)<e.genes.size+7){
+      inspected=inspected===e?null:e; return;
     }
   }
-  if (selected !== null) {
-    inspected = null;
-    for (let i=0; i<3; i++) {
+
+  // Place
+  if(selected!==null){
+    for(let i=0;i<3;i++){
       const x=clamp(mx+(Math.random()-0.5)*30,5,canvas.width-5);
       const y=clamp(my+(Math.random()-0.5)*30,5,canvas.height-5);
       entities.push(createEntity(selected,x,y));
     }
+  } else {
+    inspected=null; // click empty space with no tool = deselect
   }
 });
 
-document.getElementById('btnPause').addEventListener('click', () => {
-  paused = !paused;
-  document.getElementById('btnPause').textContent = paused ? 'Resume' : 'Pause';
-});
-document.getElementById('btnClear').addEventListener('click', () => {
-  entities=[]; nutrients=[]; inspected=null;
+document.getElementById('btnPause').addEventListener('click',()=>{
+  paused=!paused;
+  const btn=document.getElementById('btnPause');
+  btn.textContent=paused?'▶ Resume':'⏸ Pause';
+  btn.classList.toggle('paused',paused);
 });
 
-// Init: resize first, then seed, then start loop
+document.getElementById('btnClear').addEventListener('click',()=>{
+  entities=[]; nutrients=[]; history=[]; inspected=null; maxGeneration=0;
+  document.getElementById('st-gen').textContent='gen: 0';
+});
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
 resize();
 seed();
 loop();
