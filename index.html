@@ -120,6 +120,8 @@ const GENE_SPEC = {
     fertility:       [1.0,  0.4,  2.4  ],
     aggression:      [0.4,  0.0,  1.0  ],
     poisonResistance:[0.05, 0.0,  1.0  ],
+    stamina:         [1.0,  0.3,  2.8  ],
+    camouflage:      [0.0,  0.0,  0.90 ],
     mutationRate:    [0.08, 0.01, 0.50 ],
     hue:             [210,  172,  268  ],
   },
@@ -200,7 +202,8 @@ function createEntity(type,x,y,genes=null,generation=0) {
   return { id:idCounter++, type, x, y,
     vx:(Math.random()-0.5)*0.4, vy:(Math.random()-0.5)*0.4,
     genes:g, energy:EP[type].start, maxEnergy:energyMax(type,g),
-    age:0, dead:false, target:null, generation, fleeing:false, poisonedTimer:0 };
+    age:0, dead:false, target:null, generation, fleeing:false, poisonedTimer:0,
+    burstTimer:0, burstCooldown:0, hitTimer:0 };
 }
 function spawnOffspring(parent) {
   const t=parent.type, g=mutateGenes(parent.genes,t);
@@ -341,17 +344,33 @@ function stepAnimal(e) {
   const lifespan=g.size*1800, ageFrac=e.age/lifespan;
   if(ageFrac>=1){ addNutrient(e.x,e.y,g.size*2); e.dead=true; return; }
   const speedMult=ageFrac>0.7?Math.max(0.2,1-(ageFrac-0.7)*2.2):1;
-  const effSpeed=g.speed*speedMult, canReproduce=ageFrac<0.78;
+  let effSpeed=g.speed*speedMult; const canReproduce=ageFrac<0.78;
   const eatType=t===TYPE.GRAZER?TYPE.PLANT:TYPE.GRAZER;
   const predType=t===TYPE.GRAZER?TYPE.HUNTER:null;
+
+  if(e.burstTimer>0) e.burstTimer--;
+  if(e.burstCooldown>0) e.burstCooldown--;
+  if(e.hitTimer>0) e.hitTimer--;
 
   e.fleeing=false;
   if(predType!==null && g.aggression<0.72){
     const fleeR=g.senseRadius*(1.15-g.aggression*0.45);
-    const threats=nearby(e.x,e.y,fleeR).filter(n=>!n.dead&&n.type===predType);
+    const camo=g.camouflage??0;
+    // Camouflage: grazer is only visible if inside the hunter's reduced sense range
+    const threats=nearby(e.x,e.y,fleeR).filter(n=>
+      !n.dead&&n.type===predType&&dist(e,n)<n.genes.senseRadius*(1-camo*0.62));
     if(threats.length){
       const threat=threats.reduce((b,n)=>dist2(e,n)<dist2(e,b)?n:b);
       const d=dist(e,threat)||1;
+      // Burst sprint when threat enters close range
+      if(e.burstCooldown===0 && d<fleeR*0.45){
+        e.burstTimer=(18+(g.stamina??1)*8)|0;
+        e.burstCooldown=120;
+      }
+      if(e.burstTimer>0){
+        effSpeed*=1+(g.stamina??1)*0.65;
+        e.energy-=(g.stamina??1)*0.08;
+      }
       e.vx=(e.x-threat.x)/d*effSpeed; e.vy=(e.y-threat.y)/d*effSpeed;
       e.fleeing=true; e.target=null;
     }
@@ -363,7 +382,18 @@ function stepAnimal(e) {
       e.target=null;
       const cands=nearby(e.x,e.y,g.senseRadius).filter(n=>
         n!==e&&!n.dead&&n.type===eatType&&!(eatType===TYPE.PLANT&&isImmature(n)));
-      if(cands.length) e.target=cands.reduce((b,n)=>dist2(e,n)<dist2(e,b)?n:b);
+      if(cands.length){
+        if(t===TYPE.HUNTER){
+          // Herding: prefer isolated grazers — penalise targets with nearby herd-mates
+          e.target=cands.reduce((best,n)=>{
+            const hN=nearby(n.x,n.y,n.genes.senseRadius*0.65).filter(m=>!m.dead&&m.type===TYPE.GRAZER).length;
+            const hB=nearby(best.x,best.y,best.genes.senseRadius*0.65).filter(m=>!m.dead&&m.type===TYPE.GRAZER).length;
+            return dist2(e,n)*(1+hN*0.72)<dist2(e,best)*(1+hB*0.72)?n:best;
+          });
+        } else {
+          e.target=cands.reduce((b,n)=>dist2(e,n)<dist2(e,b)?n:b);
+        }
+      }
     }
     if(e.target&&!e.target.dead){
       const d=dist(e,e.target)||1;
@@ -377,7 +407,6 @@ function stepAnimal(e) {
             e.energy=Math.min(e.maxEnergy,e.energy+bite*(0.62+g.aggression*0.10));
             e.target.energy-=bite;
             if(e.target.energy<5){ addNutrient(e.target.x,e.target.y,e.target.energy); e.target.dead=true; }
-            // Poison damage
             const tox=e.target?.genes.toxicity??0;
             const poisonDmg=bite*tox*(1-(g.poisonResistance??0))*0.95;
             if(poisonDmg>0.5){
@@ -388,6 +417,11 @@ function stepAnimal(e) {
             e.target=null;
           }
         } else {
+          // Kick defense: high-aggression grazer deals damage to the hunter on contact
+          const kickDmg=e.target.genes.size*(e.target.genes.aggression??0)*0.44;
+          e.energy-=kickDmg;
+          if(kickDmg>1.5) e.hitTimer=25;
+          if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2); e.dead=true; e.target=null; return; }
           e.energy=Math.min(e.maxEnergy,e.energy+e.target.energy*(0.55+g.aggression*0.12));
           addNutrient(e.target.x,e.target.y,e.target.energy*0.3);
           e.target.dead=true; e.target=null;
@@ -496,9 +530,10 @@ function draw() {
     const immature=t===TYPE.PLANT&&isImmature(e);
     const er=Math.min(1,e.energy/e.maxEnergy);
     const ps=Math.max(1.5, g.size*0.40)*(immature?0.65:1); // pixel block size
+    const camoFade=t===TYPE.GRAZER?1-(g.camouflage??0)*0.55:1;
 
     // Soft glow behind the sprite
-    ctx.globalAlpha=immature?0.05:(t===TYPE.PLANT?0.09:er>0.7?0.07+(er-0.7)*0.28:0.07);
+    ctx.globalAlpha=(immature?0.05:(t===TYPE.PLANT?0.09:er>0.7?0.07+(er-0.7)*0.28:0.07))*camoFade;
     ctx.fillStyle=geneColor(t,g,er);
     ctx.beginPath(); ctx.arc(e.x,e.y,g.size*1.9,0,Math.PI*2); ctx.fill();
 
@@ -521,17 +556,31 @@ function draw() {
         h=g.hue; s=58+(g.aggression??0)*30; lBase=28+er*32;
       }
       const l=shade===2?lBase+14:shade===1?lBase:Math.max(8,lBase-13);
-      ctx.globalAlpha=immature?0.58:0.90+er*0.10;
+      ctx.globalAlpha=(immature?0.58:0.90+er*0.10)*camoFade;
       ctx.fillStyle=`hsl(${h.toFixed(0)},${s.toFixed(0)}%,${l.toFixed(0)}%)`;
       ctx.fillRect(dx*ps-ps*0.5, dy*ps-ps*0.5, ps, ps);
     }
     ctx.restore();
 
-    // Poisoned glow (circle overlay, no rotation needed)
+    // Burst sprint glow (grazer)
+    if((e.burstTimer??0)>0){
+      ctx.globalAlpha=0.45*(e.burstTimer/26)*camoFade;
+      ctx.fillStyle='#fff8c0';
+      ctx.beginPath(); ctx.arc(e.x,e.y,g.size*1.4,0,Math.PI*2); ctx.fill();
+    }
+
+    // Poisoned glow
     if((e.poisonedTimer??0)>0){
       ctx.globalAlpha=(e.poisonedTimer/150)*0.40;
       ctx.beginPath(); ctx.arc(e.x,e.y,g.size*1.9,0,Math.PI*2);
       ctx.fillStyle='#b040ff'; ctx.fill();
+    }
+
+    // Hunter kick-back flash (orange)
+    if((e.hitTimer??0)>0){
+      ctx.globalAlpha=(e.hitTimer/25)*0.52;
+      ctx.beginPath(); ctx.arc(e.x,e.y,g.size*2.1,0,Math.PI*2);
+      ctx.fillStyle='#ff6020'; ctx.fill();
     }
 
     // Energy bar (animals only)
@@ -661,7 +710,7 @@ function drawInspect(e) {
 
   const g=e.genes, spec=GENE_SPEC[e.type];
   const isAnimal=e.type!==TYPE.PLANT;
-  const panelH=isAnimal?(e.type===TYPE.GRAZER?190:176):170;
+  const panelH=isAnimal?(e.type===TYPE.GRAZER?216:176):170;
   const px=Math.min(e.x+r+14, canvas.width-172);
   const py=clamp(e.y-60, 8, canvas.height-panelH-8);
 
@@ -711,8 +760,11 @@ function drawInspect(e) {
     drawGeneRow('metab',   g.metabolism,   ...spec.metabolism.slice(1),   '#fa6');
     drawGeneRow('fert',    g.fertility,    ...spec.fertility.slice(1),     '#4c4');
     drawGeneRow('aggr',    g.aggression,   ...spec.aggression.slice(1),   g.aggression>0.6?'#f64':'#48f');
-    if(e.type===TYPE.GRAZER)
-      drawGeneRow('resist', g.poisonResistance, ...spec.poisonResistance.slice(1), '#b06aff');
+    if(e.type===TYPE.GRAZER){
+      drawGeneRow('resist',  g.poisonResistance, ...spec.poisonResistance.slice(1), '#b06aff');
+      drawGeneRow('stamina', g.stamina,          ...spec.stamina.slice(1),          '#ffd040');
+      drawGeneRow('camo',    g.camouflage,       ...spec.camouflage.slice(1),       '#80c8a0');
+    }
     drawGeneRow('mutRate', g.mutationRate, ...spec.mutationRate.slice(1), '#b84');
     // Age bar
     const agCol=ageFrac>0.7?'#f84':'#444';
