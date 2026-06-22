@@ -107,7 +107,7 @@ const GENE_SPEC = {
     growthRate:   [0.11,   0.02,   0.30  ],
     size:         [4.0,    2.0,    9.0   ],
     spreadChance: [0.003,  0.0004, 0.010 ],
-    sporeChance:  [0.0005, 0.00005,0.0030],
+    sporeChance:  [0.0018, 0.0001, 0.0070],
     mutationRate: [0.08,   0.01,   0.50  ],
     hue:          [120,    72,     162   ],
   },
@@ -245,34 +245,36 @@ function addNutrient(x,y,amount) {
 }
 
 // ── Spores ────────────────────────────────────────────────────────────────────
-const MAX_SPORES=60;
+const MAX_SPORES=140;
 let spores=[];
 
 function isImmature(e) { return e.type===TYPE.PLANT && e.age < e.genes.size*120; }
 
 function releaseSpore(plant) {
   if(spores.length>=MAX_SPORES) return;
-  const angle=Math.random()*Math.PI*2, speed=0.6+Math.random()*2.4;
+  const angle=Math.random()*Math.PI*2, speed=2.2+Math.random()*4.2;
   spores.push({
     x:plant.x, y:plant.y,
     vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed,
     genes:Object.assign({},plant.genes),
     generation:plant.generation+1, age:0,
-    lifetime:120+Math.random()*120|0
+    lifetime:300+Math.random()*200|0
   });
 }
 
 function stepSpores() {
   spores=spores.filter(s=>{
-    s.vx*=0.983; s.vy*=0.983; s.x+=s.vx; s.y+=s.vy;
-    if(s.x<5){s.x=5;s.vx*=-0.6;} if(s.x>canvas.width-5){s.x=canvas.width-5;s.vx*=-0.6;}
-    if(s.y<5){s.y=5;s.vy*=-0.6;} if(s.y>canvas.height-5){s.y=canvas.height-5;s.vy*=-0.6;}
+    s.vx+=(Math.random()-0.5)*0.08; s.vy+=(Math.random()-0.5)*0.08; // organic drift
+    s.vx*=0.992; s.vy*=0.992;
+    s.x+=s.vx; s.y+=s.vy;
+    if(s.x<5){s.x=5;s.vx*=-0.72;} if(s.x>canvas.width-5){s.x=canvas.width-5;s.vx*=-0.72;}
+    if(s.y<5){s.y=5;s.vy*=-0.72;} if(s.y>canvas.height-5){s.y=canvas.height-5;s.vy*=-0.72;}
     s.age++;
     if(s.age>=s.lifetime){
       if(popCount[TYPE.PLANT]<MAX_POP[TYPE.PLANT]&&entities.length+newborns.length<MAX_ENTITIES){
         const g=mutateGenes(s.genes,TYPE.PLANT);
         const child=createEntity(TYPE.PLANT,s.x,s.y,g,s.generation);
-        child.energy=EP[TYPE.PLANT].start*0.45; child.maxEnergy=energyMax(TYPE.PLANT,g);
+        child.energy=EP[TYPE.PLANT].start*0.58; child.maxEnergy=energyMax(TYPE.PLANT,g);
         newborns.push(child);
       }
       return false;
@@ -444,17 +446,32 @@ function draw() {
   }
 
   // Spores
+  ctx.lineCap='round';
   for(const s of spores){
     const ageFrac=s.age/s.lifetime;
-    const a=ageFrac<0.15?ageFrac/0.15:ageFrac>0.75?(1-ageFrac)/0.25:1;
-    ctx.globalAlpha=a*0.22;
-    ctx.beginPath(); ctx.arc(s.x,s.y,6,0,Math.PI*2);
-    ctx.fillStyle=`hsl(${s.genes.hue},60%,68%)`; ctx.fill();
-    ctx.globalAlpha=a*0.85;
-    ctx.beginPath(); ctx.arc(s.x,s.y,1.8,0,Math.PI*2);
-    ctx.fillStyle=`hsl(${s.genes.hue},55%,75%)`; ctx.fill();
+    const a=ageFrac<0.10?ageFrac/0.10:ageFrac>0.80?(1-ageFrac)/0.20:1;
+    const spd=Math.sqrt(s.vx*s.vx+s.vy*s.vy);
+    // Speed-proportional trail
+    if(spd>0.2){
+      const tl=Math.min(spd*6,30);
+      ctx.globalAlpha=a*0.50;
+      ctx.strokeStyle=`hsl(${s.genes.hue},70%,62%)`;
+      ctx.lineWidth=1.8;
+      ctx.beginPath();
+      ctx.moveTo(s.x-s.vx/spd*tl, s.y-s.vy/spd*tl);
+      ctx.lineTo(s.x, s.y);
+      ctx.stroke();
+    }
+    // Outer glow
+    ctx.globalAlpha=a*0.20;
+    ctx.beginPath(); ctx.arc(s.x,s.y,10,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${s.genes.hue},75%,60%)`; ctx.fill();
+    // Bright core
+    ctx.globalAlpha=a*0.92;
+    ctx.beginPath(); ctx.arc(s.x,s.y,2.4,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${s.genes.hue},55%,88%)`; ctx.fill();
   }
-  ctx.globalAlpha=1;
+  ctx.globalAlpha=1; ctx.lineCap='butt';
 
   if(inspected&&!inspected.dead) drawInspect(inspected);
   drawGraph();
