@@ -104,11 +104,12 @@ const TYPE = { PLANT: 0, GRAZER: 1, HUNTER: 2 };
 
 const GENE_SPEC = {
   [TYPE.PLANT]: {
-    growthRate:   [0.11,  0.02,  0.30 ],
-    size:         [4.0,   2.0,   9.0  ],
-    spreadChance: [0.003, 0.0004,0.010],
-    mutationRate: [0.08,  0.01,  0.50 ],
-    hue:          [120,   72,    162  ],
+    growthRate:   [0.11,   0.02,   0.30  ],
+    size:         [4.0,    2.0,    9.0   ],
+    spreadChance: [0.003,  0.0004, 0.010 ],
+    sporeChance:  [0.0005, 0.00005,0.0030],
+    mutationRate: [0.08,   0.01,   0.50  ],
+    hue:          [120,    72,     162   ],
   },
   [TYPE.GRAZER]: {
     speed:        [1.2,   0.3,   3.0  ],
@@ -243,6 +244,43 @@ function addNutrient(x,y,amount) {
   if(nutrients.length<MAX_NUTRIENTS) nutrients.push({x,y,amount});
 }
 
+// ── Spores ────────────────────────────────────────────────────────────────────
+const MAX_SPORES=60;
+let spores=[];
+
+function isImmature(e) { return e.type===TYPE.PLANT && e.age < e.genes.size*120; }
+
+function releaseSpore(plant) {
+  if(spores.length>=MAX_SPORES) return;
+  const angle=Math.random()*Math.PI*2, speed=0.6+Math.random()*2.4;
+  spores.push({
+    x:plant.x, y:plant.y,
+    vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed,
+    genes:Object.assign({},plant.genes),
+    generation:plant.generation+1, age:0,
+    lifetime:120+Math.random()*120|0
+  });
+}
+
+function stepSpores() {
+  spores=spores.filter(s=>{
+    s.vx*=0.983; s.vy*=0.983; s.x+=s.vx; s.y+=s.vy;
+    if(s.x<5){s.x=5;s.vx*=-0.6;} if(s.x>canvas.width-5){s.x=canvas.width-5;s.vx*=-0.6;}
+    if(s.y<5){s.y=5;s.vy*=-0.6;} if(s.y>canvas.height-5){s.y=canvas.height-5;s.vy*=-0.6;}
+    s.age++;
+    if(s.age>=s.lifetime){
+      if(popCount[TYPE.PLANT]<MAX_POP[TYPE.PLANT]&&entities.length+newborns.length<MAX_ENTITIES){
+        const g=mutateGenes(s.genes,TYPE.PLANT);
+        const child=createEntity(TYPE.PLANT,s.x,s.y,g,s.generation);
+        child.energy=EP[TYPE.PLANT].start*0.45; child.maxEnergy=energyMax(TYPE.PLANT,g);
+        newborns.push(child);
+      }
+      return false;
+    }
+    return true;
+  });
+}
+
 // ── Simulation ─────────────────────────────────────────────────────────────────
 let newborns=[];
 
@@ -259,6 +297,9 @@ function stepPlant(e) {
     && entities.length+newborns.length<MAX_ENTITIES
     && e.energy>rt && Math.random()<e.genes.spreadChance) {
     e.energy-=rc; newborns.push(spawnOffspring(e));
+  }
+  if(spores.length<MAX_SPORES && e.energy>rt*0.55 && Math.random()<e.genes.sporeChance){
+    releaseSpore(e); e.energy-=rc*0.28;
   }
 }
 
@@ -287,7 +328,8 @@ function stepAnimal(e) {
     const lost=!e.target||e.target.dead||dist2(e,e.target)>(g.senseRadius*1.6)**2;
     if(lost){
       e.target=null;
-      const cands=nearby(e.x,e.y,g.senseRadius).filter(n=>n!==e&&!n.dead&&n.type===eatType);
+      const cands=nearby(e.x,e.y,g.senseRadius).filter(n=>
+        n!==e&&!n.dead&&n.type===eatType&&!(eatType===TYPE.PLANT&&isImmature(n)));
       if(cands.length) e.target=cands.reduce((b,n)=>dist2(e,n)<dist2(e,b)?n:b);
     }
     if(e.target&&!e.target.dead){
@@ -345,6 +387,7 @@ function step() {
   for(const e of entities){ if(e.dead) continue; e.age++; (e.type===TYPE.PLANT?stepPlant:stepAnimal)(e); }
   nutrients=nutrients.filter(n=>{n.amount*=0.997;return n.amount>0.7;});
   entities=entities.filter(e=>!e.dead);
+  stepSpores();
   for(const e of newborns) if(e.generation>maxGeneration) maxGeneration=e.generation;
   entities.push(...newborns);
   checkExtinction();
@@ -377,23 +420,39 @@ function draw() {
   // Entities
   for(const e of entities){
     const r=e.genes.size, er=Math.min(1,e.energy/e.maxEnergy);
-    const color=geneColor(e.type,e.genes,er);
+    const immature=e.type===TYPE.PLANT&&isImmature(e);
+    const visR=immature?r*0.62:r;
+    const color=immature
+      ?`hsl(${e.genes.hue-20},46%,${(42+er*16).toFixed(0)}%)`
+      :geneColor(e.type,e.genes,er);
     const glowA=e.type===TYPE.PLANT?0.10:(er>0.7?0.08+(er-0.7)*0.35:0.08);
-    ctx.globalAlpha=glowA;
-    ctx.beginPath(); ctx.arc(e.x,e.y,r*2.3,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
-    ctx.globalAlpha=0.82+er*0.18;
-    ctx.beginPath(); ctx.arc(e.x,e.y,r,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
+    ctx.globalAlpha=immature?0.06:glowA;
+    ctx.beginPath(); ctx.arc(e.x,e.y,visR*2.3,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
+    ctx.globalAlpha=immature?0.55:0.82+er*0.18;
+    ctx.beginPath(); ctx.arc(e.x,e.y,visR,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
     if(e.type===TYPE.HUNTER){
       ctx.globalAlpha=0.55;
-      ctx.beginPath(); ctx.arc(e.x,e.y,r*0.4,0,Math.PI*2);
+      ctx.beginPath(); ctx.arc(e.x,e.y,visR*0.4,0,Math.PI*2);
       ctx.fillStyle=`hsl(${e.genes.hue},100%,80%)`; ctx.fill();
     }
     if(e.type!==TYPE.PLANT){
-      const bw=r*2.5;
+      const bw=visR*2.5;
       ctx.globalAlpha=0.55;
-      ctx.fillStyle='#111'; ctx.fillRect(e.x-bw/2,e.y-r-5,bw,2);
-      ctx.fillStyle=e.fleeing?'#f84':color; ctx.fillRect(e.x-bw/2,e.y-r-5,bw*er,2);
+      ctx.fillStyle='#111'; ctx.fillRect(e.x-bw/2,e.y-visR-5,bw,2);
+      ctx.fillStyle=e.fleeing?'#f84':color; ctx.fillRect(e.x-bw/2,e.y-visR-5,bw*er,2);
     }
+  }
+
+  // Spores
+  for(const s of spores){
+    const ageFrac=s.age/s.lifetime;
+    const a=ageFrac<0.15?ageFrac/0.15:ageFrac>0.75?(1-ageFrac)/0.25:1;
+    ctx.globalAlpha=a*0.22;
+    ctx.beginPath(); ctx.arc(s.x,s.y,6,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${s.genes.hue},60%,68%)`; ctx.fill();
+    ctx.globalAlpha=a*0.85;
+    ctx.beginPath(); ctx.arc(s.x,s.y,1.8,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${s.genes.hue},55%,75%)`; ctx.fill();
   }
   ctx.globalAlpha=1;
 
@@ -480,7 +539,10 @@ let inspected = null;
 
 function drawInspect(e) {
   const r=e.genes.size, er=Math.min(1,e.energy/e.maxEnergy);
-  const color=geneColor(e.type,e.genes,er);
+  const immature=e.type===TYPE.PLANT&&isImmature(e);
+  const color=immature
+    ?`hsl(${e.genes.hue-20},46%,${(42+er*16).toFixed(0)}%)`
+    :geneColor(e.type,e.genes,er);
 
   // Selection ring
   ctx.save();
@@ -494,7 +556,7 @@ function drawInspect(e) {
 
   const g=e.genes, spec=GENE_SPEC[e.type];
   const isAnimal=e.type!==TYPE.PLANT;
-  const panelH=isAnimal?176:142;
+  const panelH=isAnimal?176:156;
   const px=Math.min(e.x+r+14, canvas.width-172);
   const py=clamp(e.y-60, 8, canvas.height-panelH-8);
 
@@ -506,7 +568,7 @@ function drawInspect(e) {
 
   // Header
   ctx.fillStyle=color;
-  ctx.fillText(['PLANT','GRAZER','HUNTER'][e.type], px+7, iy); iy+=13;
+  ctx.fillText(immature?'PLANT  ◆ seedling':['PLANT','GRAZER','HUNTER'][e.type], px+7, iy); iy+=13;
   ctx.fillStyle='#444';
   ctx.fillText(`gen ${e.generation}  ·  age ${e.age}`, px+7, iy); iy+=11;
   ctx.fillStyle='#181828';
@@ -529,11 +591,12 @@ function drawInspect(e) {
 
   ctx.font='9px monospace';
   if(e.type===TYPE.PLANT){
-    drawGeneRow('growth',   g.growthRate,   ...spec.growthRate.slice(1),   '#4b4');
-    drawGeneRow('spread',   g.spreadChance, ...spec.spreadChance.slice(1), '#4b4');
-    drawGeneRow('size',     g.size,         ...spec.size.slice(1),          '#aaa');
-    drawGeneRow('mutRate',  g.mutationRate, ...spec.mutationRate.slice(1),  '#b84');
-    drawGeneRow('hue',      g.hue,          ...spec.hue.slice(1),           '#888');
+    drawGeneRow('growth',  g.growthRate,   ...spec.growthRate.slice(1),   '#4b4');
+    drawGeneRow('spread',  g.spreadChance, ...spec.spreadChance.slice(1), '#4b4');
+    drawGeneRow('spores',  g.sporeChance,  ...spec.sporeChance.slice(1),  '#ad4');
+    drawGeneRow('size',    g.size,         ...spec.size.slice(1),          '#aaa');
+    drawGeneRow('mutRate', g.mutationRate, ...spec.mutationRate.slice(1),  '#b84');
+    drawGeneRow('hue',     g.hue,          ...spec.hue.slice(1),           '#888');
   } else {
     const ageFrac=e.age/(g.size*1800);
     drawGeneRow('speed',   g.speed,        ...spec.speed.slice(1),        '#7af');
@@ -636,7 +699,7 @@ document.getElementById('btnPause').addEventListener('click',()=>{
 });
 
 document.getElementById('btnClear').addEventListener('click',()=>{
-  entities=[]; nutrients=[]; history=[]; inspected=null; maxGeneration=0;
+  entities=[]; nutrients=[]; spores=[]; history=[]; inspected=null; maxGeneration=0;
   document.getElementById('st-gen').textContent='gen: 0';
   localStorage.removeItem(SAVE_KEY);
 });
