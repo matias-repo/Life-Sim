@@ -176,7 +176,13 @@ function mutateGenes(pg, type) {
 function energyMax(t,g)    { return EP[t].maxBase *(g.size/SIZE_DEF[t]); }
 function repThreshold(t,g) { return EP[t].repBase *(g.size/SIZE_DEF[t])/(g.fertility??1); }
 function repCost(t,g)      { return EP[t].costBase*(g.size/SIZE_DEF[t]); }
-function metabolicRate(g)  { return (g.speed*g.speed*0.016+g.size*0.0024+0.005)*g.metabolism; }
+function metabolicRate(g) {
+  const speedCost = g.speed*g.speed*0.017;
+  const sizeCost  = g.size*g.size*0.00048;        // quadratic — big bodies cost much more
+  const senseCost = (g.senseRadius??0)*0.00010;   // large sense radius costs brain energy
+  const fertCost  = Math.max(0,(g.fertility??1)-1)*0.0022; // reproduction above baseline
+  return (speedCost + sizeCost + senseCost + fertCost + 0.004) * g.metabolism;
+}
 
 function geneColor(type,g,er) {
   if(type===TYPE.PLANT){
@@ -317,6 +323,7 @@ function stepPlant(e) {
     if(d2<1444) bonus+=n.amount*(1-Math.sqrt(d2)/38)*0.5;
   }
   e.energy=Math.min(e.maxEnergy, e.energy+e.genes.growthRate*(1+bonus));
+  e.energy-=e.genes.size*0.0010+e.genes.spreadChance*2.5; // size & spread upkeep cost
   if(e.age>4000+e.genes.size*800){ addNutrient(e.x,e.y,e.genes.size*2.5); e.dead=true; return; }
   const rt=repThreshold(TYPE.PLANT,e.genes), rc=repCost(TYPE.PLANT,e.genes);
   if(popCount[TYPE.PLANT]<MAX_POP[TYPE.PLANT]
@@ -442,6 +449,33 @@ function recordHistory() {
   if (history.length > HISTORY_LEN) history.shift();
 }
 
+// ── Sprites ───────────────────────────────────────────────────────────────────
+// Each entry: [dx, dy, shade]  shade: 2=bright highlight  1=mid body  0=dark shadow
+const SPRITE = {
+  [TYPE.PLANT]: [
+    // Diamond/cross — looks like a stylised plant or flower
+    [0,-2, 2],
+    [-1,-1,1],[0,-1,2],[1,-1,1],
+    [-2, 0,1],[-1, 0,2],[0, 0,2],[1, 0,2],[2, 0,1],
+    [-1, 1,1],[0, 1,2],[1, 1,1],
+    [0, 2, 2],
+  ],
+  [TYPE.GRAZER]: [
+    // Wide, squat herbivore with ear nubs and stubby legs
+    [-2,-2,2],[2,-2,2],                                     // ears
+    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],        // top body
+    [-2, 0,1],[-1, 0,2],[0, 0,2],[1, 0,2],[2, 0,1],        // mid body
+    [-2, 1,1],[-1, 1,2],[0, 1,2],[1, 1,2],[2, 1,1],        // bottom body
+    [-1, 2,1],[1, 2,1],                                     // legs
+  ],
+  [TYPE.HUNTER]: [
+    // Asymmetric arrow — right side is the tip; canvas rotates to face velocity
+    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,1],
+    [-2, 0,1],[-1, 0,2],[0, 0,2],[1, 0,2],[2, 0,2],        // centre row extends to tip
+    [-2, 1,1],[-1, 1,2],[0, 1,2],[1, 1,1],
+  ],
+};
+
 // ── Render ─────────────────────────────────────────────────────────────────────
 function draw() {
   ctx.fillStyle='#07070f';
@@ -456,37 +490,58 @@ function draw() {
   }
   ctx.globalAlpha=1;
 
-  // Entities
+  // Entities — pixel art sprites
   for(const e of entities){
-    const r=e.genes.size, er=Math.min(1,e.energy/e.maxEnergy);
-    const immature=e.type===TYPE.PLANT&&isImmature(e);
-    const visR=immature?r*0.62:r;
-    const color=immature
-      ?`hsl(${e.genes.hue-20},46%,${(42+er*16).toFixed(0)}%)`
-      :geneColor(e.type,e.genes,er);
-    const glowA=e.type===TYPE.PLANT?0.10:(er>0.7?0.08+(er-0.7)*0.35:0.08);
-    ctx.globalAlpha=immature?0.06:glowA;
-    ctx.beginPath(); ctx.arc(e.x,e.y,visR*2.3,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
-    ctx.globalAlpha=immature?0.55:0.82+er*0.18;
-    ctx.beginPath(); ctx.arc(e.x,e.y,visR,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
-    if(e.type===TYPE.HUNTER){
-      ctx.globalAlpha=0.55;
-      ctx.beginPath(); ctx.arc(e.x,e.y,visR*0.4,0,Math.PI*2);
-      ctx.fillStyle=`hsl(${e.genes.hue},100%,80%)`; ctx.fill();
+    const g=e.genes, t=e.type;
+    const immature=t===TYPE.PLANT&&isImmature(e);
+    const er=Math.min(1,e.energy/e.maxEnergy);
+    const ps=Math.max(1.5, g.size*0.40)*(immature?0.65:1); // pixel block size
+
+    // Soft glow behind the sprite
+    ctx.globalAlpha=immature?0.05:(t===TYPE.PLANT?0.09:er>0.7?0.07+(er-0.7)*0.28:0.07);
+    ctx.fillStyle=geneColor(t,g,er);
+    ctx.beginPath(); ctx.arc(e.x,e.y,g.size*1.9,0,Math.PI*2); ctx.fill();
+
+    // Pixel art body
+    ctx.save();
+    ctx.translate(e.x,e.y);
+    if(t===TYPE.HUNTER){
+      const spd=Math.sqrt(e.vx*e.vx+e.vy*e.vy);
+      if(spd>0.05) ctx.rotate(Math.atan2(e.vy,e.vx));
     }
-    if(e.type!==TYPE.PLANT){
-      const bw=visR*2.5;
-      ctx.globalAlpha=0.55;
-      ctx.fillStyle='#111'; ctx.fillRect(e.x-bw/2,e.y-visR-5,bw,2);
-      ctx.fillStyle=e.fleeing?'#f84':color; ctx.fillRect(e.x-bw/2,e.y-visR-5,bw*er,2);
+    const spr=SPRITE[t];
+    for(const [dx,dy,shade] of spr){
+      let h,s,lBase;
+      if(t===TYPE.PLANT){
+        const tox=g.toxicity??0;
+        let hh=g.hue-tox*185; if(hh<0) hh+=360;
+        h=hh; s=immature?46:58+tox*22;
+        lBase=immature?(42+er*16):(20+er*26);
+      } else {
+        h=g.hue; s=58+(g.aggression??0)*30; lBase=28+er*32;
+      }
+      const l=shade===2?lBase+14:shade===1?lBase:Math.max(8,lBase-13);
+      ctx.globalAlpha=immature?0.58:0.90+er*0.10;
+      ctx.fillStyle=`hsl(${h.toFixed(0)},${s.toFixed(0)}%,${l.toFixed(0)}%)`;
+      ctx.fillRect(dx*ps-ps*0.5, dy*ps-ps*0.5, ps, ps);
     }
-    // Poisoned glow
+    ctx.restore();
+
+    // Poisoned glow (circle overlay, no rotation needed)
     if((e.poisonedTimer??0)>0){
-      const pt=e.poisonedTimer/150;
-      ctx.globalAlpha=pt*0.45;
-      ctx.beginPath(); ctx.arc(e.x,e.y,visR*2,0,Math.PI*2);
+      ctx.globalAlpha=(e.poisonedTimer/150)*0.40;
+      ctx.beginPath(); ctx.arc(e.x,e.y,g.size*1.9,0,Math.PI*2);
       ctx.fillStyle='#b040ff'; ctx.fill();
     }
+
+    // Energy bar (animals only)
+    if(t!==TYPE.PLANT){
+      const bw=g.size*3.0, bx=e.x-bw/2, by=e.y+g.size+4;
+      ctx.globalAlpha=0.55;
+      ctx.fillStyle='#111'; ctx.fillRect(bx,by,bw,2);
+      ctx.fillStyle=e.fleeing?'#f84':geneColor(t,g,er); ctx.fillRect(bx,by,bw*er,2);
+    }
+    ctx.globalAlpha=1;
   }
 
   // Spores
