@@ -112,8 +112,16 @@ function resize() {
   const statsH = document.getElementById('stats').offsetHeight || 20;
   canvas.width  = Math.min(window.innerWidth - 2, 960);
   canvas.height = Math.max(window.innerHeight - h1H - uiH - statsH - 14, 260);
+  WORLD_W = canvas.width * 2;
+  WORLD_H = canvas.height * 2;
+  cam.x = clamp(cam.x, 0, Math.max(0, WORLD_W - canvas.width));
+  cam.y = clamp(cam.y, 0, Math.max(0, WORLD_H - canvas.height));
 }
 window.addEventListener('resize', resize);
+
+// World dimensions and camera (set properly in resize())
+let WORLD_W = 0, WORLD_H = 0;
+let cam = { x: 0, y: 0 };
 
 // ── Types & constants ──────────────────────────────────────────────────────────
 const TYPE = { PLANT: 0, GRAZER: 1, HUNTER: 2 };
@@ -163,8 +171,8 @@ const EP = {
 };
 
 const SIZE_DEF     = { [TYPE.PLANT]: 4, [TYPE.GRAZER]: 5, [TYPE.HUNTER]: 6 };
-const MAX_ENTITIES = 450;
-const MAX_POP      = [200, 160, 45];
+const MAX_ENTITIES = 750;
+const MAX_POP      = [350, 260, 75];
 
 // ── Math ───────────────────────────────────────────────────────────────────────
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -233,8 +241,8 @@ function spawnOffspring(parent) {
   const rateMult=(ageFrac>0.65&&ageFrac<0.78)?0.58:1.0;
   const g=mutateGenes(parent.genes,t,rateMult);
   const angle=Math.random()*Math.PI*2, d=parent.genes.size*3.5;
-  const x=((parent.x+Math.cos(angle)*d)%canvas.width+canvas.width)%canvas.width;
-  const y=((parent.y+Math.sin(angle)*d)%canvas.height+canvas.height)%canvas.height;
+  const x=((parent.x+Math.cos(angle)*d)%WORLD_W+WORLD_W)%WORLD_W;
+  const y=((parent.y+Math.sin(angle)*d)%WORLD_H+WORLD_H)%WORLD_H;
   const child=createEntity(t,x,y,g,parent.generation+1);
   child.maxEnergy=energyMax(t,g); child.energy=EP[t].start*0.6;
   // Carry ancestry chain forward (last 5 snapshots)
@@ -251,16 +259,16 @@ function spawnRandom(type) {
     gen   = Math.max(gen, src.generation);
   }
   return createEntity(type,
-    Math.random()*(canvas.width-20)+10,
-    Math.random()*(canvas.height-20)+10,
+    Math.random()*(WORLD_W-20)+10,
+    Math.random()*(WORLD_H-20)+10,
     genes, gen);
 }
 
 let entities=[];
 function seed() {
-  for(let i=0;i<55;i++) entities.push(spawnRandom(TYPE.PLANT));
-  for(let i=0;i<12;i++) entities.push(spawnRandom(TYPE.GRAZER));
-  for(let i=0;i< 2;i++) entities.push(spawnRandom(TYPE.HUNTER));
+  for(let i=0;i<110;i++) entities.push(spawnRandom(TYPE.PLANT));
+  for(let i=0;i< 22;i++) entities.push(spawnRandom(TYPE.GRAZER));
+  for(let i=0;i<  4;i++) entities.push(spawnRandom(TYPE.HUNTER));
 }
 
 // ── Grid ───────────────────────────────────────────────────────────────────────
@@ -299,11 +307,11 @@ function addNutrient(x,y,amount) {
 let fertZones = []; // {x,y,r,str}
 function genFertZones() {
   fertZones = [];
-  for(let i=0;i<5;i++){
+  for(let i=0;i<9;i++){
     fertZones.push({
-      x: 80 + Math.random()*(canvas.width-160),
-      y: 60 + Math.random()*(canvas.height-120),
-      r: 70 + Math.random()*80,
+      x: 80 + Math.random()*(WORLD_W-160),
+      y: 60 + Math.random()*(WORLD_H-120),
+      r: 80 + Math.random()*100,
       str: 0.55 + Math.random()*0.45
     });
   }
@@ -358,8 +366,8 @@ function stepSpores() {
     s.vx+=(Math.random()-0.5)*0.08; s.vy+=(Math.random()-0.5)*0.08; // organic drift
     s.vx*=0.992; s.vy*=0.992;
     s.x+=s.vx; s.y+=s.vy;
-    if(s.x<0) s.x+=canvas.width; else if(s.x>=canvas.width) s.x-=canvas.width;
-    if(s.y<0) s.y+=canvas.height; else if(s.y>=canvas.height) s.y-=canvas.height;
+    if(s.x<0) s.x+=WORLD_W; else if(s.x>=WORLD_W) s.x-=WORLD_W;
+    if(s.y<0) s.y+=WORLD_H; else if(s.y>=WORLD_H) s.y-=WORLD_H;
     s.age++;
     if(s.age>=s.lifetime){
       if(popCount[TYPE.PLANT]<MAX_POP[TYPE.PLANT]&&entities.length+newborns.length<MAX_ENTITIES){
@@ -603,8 +611,8 @@ function stepAnimal(e) {
   }
 
   e.x+=e.vx; e.y+=e.vy;
-  if(e.x<0) e.x+=canvas.width; else if(e.x>=canvas.width) e.x-=canvas.width;
-  if(e.y<0) e.y+=canvas.height; else if(e.y>=canvas.height) e.y-=canvas.height;
+  if(e.x<0) e.x+=WORLD_W; else if(e.x>=WORLD_W) e.x-=WORLD_W;
+  if(e.y<0) e.y+=WORLD_H; else if(e.y>=WORLD_H) e.y-=WORLD_H;
 
   if(e.poisonedTimer>0) e.poisonedTimer--;
   const metabMult=sleepingThisFrame?0.28:1.0;
@@ -795,6 +803,40 @@ function drawStructures() {
   }
 }
 
+function drawMiniMap() {
+  const MW=130, MH=Math.round(MW*(WORLD_H/WORLD_W));
+  const MX=canvas.width-MW-10, MY=10+72+8; // below the graph
+  const sx=MW/WORLD_W, sy=MH/WORLD_H;
+  ctx.fillStyle='rgba(2,2,10,0.82)'; ctx.fillRect(MX,MY,MW,MH);
+  ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=1; ctx.strokeRect(MX,MY,MW,MH);
+  // Fertility zones
+  for(const z of fertZones){
+    ctx.globalAlpha=0.12;
+    ctx.fillStyle='#2a5a2a';
+    ctx.beginPath(); ctx.arc(MX+z.x*sx, MY+z.y*sy, z.r*sx, 0, Math.PI*2); ctx.fill();
+  }
+  // Entities as 1.5px colored dots
+  for(const e of entities){
+    if(e.dead) continue;
+    ctx.globalAlpha=0.75;
+    ctx.fillStyle=e.type===TYPE.PLANT?'#2a6a2a':e.type===TYPE.GRAZER?'#2a5a8a':'#8a2a18';
+    ctx.fillRect(MX+e.x*sx-0.75, MY+e.y*sy-0.75, 1.5, 1.5);
+  }
+  // Structures
+  for(const s of structures){
+    ctx.globalAlpha=0.85;
+    ctx.fillStyle=s.type===STRUCT.NEST?'#c8903a':'#9070d0';
+    ctx.fillRect(MX+s.x*sx-1.5, MY+s.y*sy-1.5, 3, 3);
+  }
+  // Viewport rectangle
+  ctx.globalAlpha=0.65; ctx.strokeStyle='#8888aa'; ctx.lineWidth=1;
+  ctx.strokeRect(MX+cam.x*sx, MY+cam.y*sy, canvas.width*sx, canvas.height*sy);
+  ctx.globalAlpha=1;
+  // Label
+  ctx.fillStyle='#222'; ctx.font='8px monospace';
+  ctx.fillText('map', MX+MW-26, MY+MH-3);
+}
+
 function drawDayClock() {
   const ni=nightIntensity();
   const p=(tick%DAY_LENGTH)/DAY_LENGTH;
@@ -819,6 +861,10 @@ function drawDayClock() {
 function draw() {
   ctx.fillStyle='#07070f';
   ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Apply camera transform — all world-space drawing goes between save/restore
+  ctx.save();
+  ctx.translate(-cam.x, -cam.y);
 
   // Structures (behind everything else)
   drawStructures();
@@ -964,7 +1010,13 @@ function draw() {
   }
   ctx.globalAlpha=1;
 
-  // Night sky overlay — dims and blue-tints at night
+  // Inspect panel is drawn in world-space (camera transform still active)
+  if(inspected&&!inspected.dead) drawInspect(inspected);
+
+  // Restore from camera transform — HUD elements below are in canvas-space
+  ctx.restore();
+
+  // Night sky overlay — covers the viewport
   const _ni=nightIntensity();
   if(_ni>0.02){
     ctx.globalAlpha=_ni*0.40;
@@ -973,13 +1025,13 @@ function draw() {
     ctx.globalAlpha=1;
   }
 
-  if(inspected&&!inspected.dead) drawInspect(inspected);
   drawGraph();
   drawAtmos();
   drawChallenge();
   drawEventLog();
   drawHeatmapLabel();
   drawDayClock();
+  drawMiniMap();
 }
 
 function drawChallenge() {
@@ -1150,8 +1202,8 @@ function drawInspect(e) {
   const g=e.genes, spec=GENE_SPEC[e.type];
   const isAnimal=e.type!==TYPE.PLANT;
   const panelH=isAnimal?(e.type===TYPE.GRAZER?216:203):183;
-  const px=Math.min(e.x+r+14, canvas.width-172);
-  const py=clamp(e.y-60, 8, canvas.height-panelH-8);
+  const px=Math.min(e.x+r+14, cam.x+canvas.width-172);
+  const py=clamp(e.y-60, cam.y+8, cam.y+canvas.height-panelH-8);
 
   ctx.fillStyle='rgba(3,3,11,0.92)'; ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=1;
   ctx.fillRect(px,py,168,panelH); ctx.strokeRect(px,py,168,panelH);
@@ -1327,10 +1379,11 @@ speedBtns.forEach(([btn,spd])=>{
   });
 });
 
-// Canvas click — inspect or place
+// Canvas click — inspect or place (convert to world coords via cam)
 canvas.addEventListener('click', ev=>{
+  if(_panning) return; // suppress click when pan just finished
   const rect=canvas.getBoundingClientRect();
-  const mx=ev.clientX-rect.left, my=ev.clientY-rect.top;
+  const mx=ev.clientX-rect.left+cam.x, my=ev.clientY-rect.top+cam.y; // world coords
   const pt={x:mx,y:my};
 
   // Inspect
@@ -1344,17 +1397,34 @@ canvas.addEventListener('click', ev=>{
   // Place entity
   if(selected!==null){
     for(let i=0;i<3;i++){
-      const x=clamp(mx+(Math.random()-0.5)*30,5,canvas.width-5);
-      const y=clamp(my+(Math.random()-0.5)*30,5,canvas.height-5);
+      const x=clamp(mx+(Math.random()-0.5)*30,5,WORLD_W-5);
+      const y=clamp(my+(Math.random()-0.5)*30,5,WORLD_H-5);
       entities.push(createEntity(selected,x,y));
     }
   } else if(selStruct!==null){
-    // Place structure (nest or roost)
     structures.push({type:selStruct, x:mx, y:my});
   } else {
     inspected=null;
   }
 });
+
+// Right-click / middle-click drag to pan the camera
+let _panning=false, _panStart=null;
+canvas.addEventListener('mousedown', ev=>{
+  if(ev.button===2||ev.button===1){
+    _panStart={mx:ev.clientX, my:ev.clientY, cx:cam.x, cy:cam.y};
+    ev.preventDefault();
+  }
+});
+canvas.addEventListener('mousemove', ev=>{
+  if(!_panStart) return;
+  _panning=true;
+  cam.x=clamp(_panStart.cx-(ev.clientX-_panStart.mx), 0, WORLD_W-canvas.width);
+  cam.y=clamp(_panStart.cy-(ev.clientY-_panStart.my), 0, WORLD_H-canvas.height);
+});
+canvas.addEventListener('mouseup',   ()=>{ _panStart=null; setTimeout(()=>_panning=false,10); });
+canvas.addEventListener('mouseleave',()=>{ _panStart=null; _panning=false; });
+canvas.addEventListener('contextmenu', ev=>ev.preventDefault());
 
 document.getElementById('btnPause').addEventListener('click',()=>{
   paused=!paused;
@@ -1380,7 +1450,12 @@ function cycleHeatmap(){
 }
 btnHeat.addEventListener('click',cycleHeatmap);
 document.addEventListener('keydown',ev=>{
-  if(ev.key==='h'||ev.key==='H') cycleHeatmap();
+  if(ev.key==='h'||ev.key==='H'){ cycleHeatmap(); return; }
+  const PAN=120;
+  if(ev.key==='ArrowLeft')  cam.x=clamp(cam.x-PAN, 0, WORLD_W-canvas.width);
+  if(ev.key==='ArrowRight') cam.x=clamp(cam.x+PAN, 0, WORLD_W-canvas.width);
+  if(ev.key==='ArrowUp')    cam.y=clamp(cam.y-PAN, 0, WORLD_H-canvas.height);
+  if(ev.key==='ArrowDown')  cam.y=clamp(cam.y+PAN, 0, WORLD_H-canvas.height);
 });
 
 const btnGoal=document.getElementById('btnGoal');
@@ -1419,8 +1494,8 @@ function loadState() {
     maxGeneration = d.maxGeneration ?? 0;
     entities = (d.entities ?? []).map(s => ({
       id: s.id, type: s.type,
-      x: clamp(s.x, 5, canvas.width-5),
-      y: clamp(s.y, 5, canvas.height-5),
+      x: clamp(s.x, 5, WORLD_W-5),
+      y: clamp(s.y, 5, WORLD_H-5),
       vx: s.vx, vy: s.vy, genes: s.genes,
       energy: s.energy, maxEnergy: energyMax(s.type, s.genes),
       age: s.age, dead: false, target: null,
