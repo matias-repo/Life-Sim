@@ -208,8 +208,8 @@ function createEntity(type,x,y,genes=null,generation=0) {
 function spawnOffspring(parent) {
   const t=parent.type, g=mutateGenes(parent.genes,t);
   const angle=Math.random()*Math.PI*2, d=parent.genes.size*3.5;
-  const x=clamp(parent.x+Math.cos(angle)*d,5,canvas.width-5);
-  const y=clamp(parent.y+Math.sin(angle)*d,5,canvas.height-5);
+  const x=((parent.x+Math.cos(angle)*d)%canvas.width+canvas.width)%canvas.width;
+  const y=((parent.y+Math.sin(angle)*d)%canvas.height+canvas.height)%canvas.height;
   const child=createEntity(t,x,y,g,parent.generation+1);
   child.maxEnergy=energyMax(t,g); child.energy=EP[t].start*0.6;
   return child;
@@ -300,8 +300,8 @@ function stepSpores() {
     s.vx+=(Math.random()-0.5)*0.08; s.vy+=(Math.random()-0.5)*0.08; // organic drift
     s.vx*=0.992; s.vy*=0.992;
     s.x+=s.vx; s.y+=s.vy;
-    if(s.x<5){s.x=5;s.vx*=-0.72;} if(s.x>canvas.width-5){s.x=canvas.width-5;s.vx*=-0.72;}
-    if(s.y<5){s.y=5;s.vy*=-0.72;} if(s.y>canvas.height-5){s.y=canvas.height-5;s.vy*=-0.72;}
+    if(s.x<0) s.x+=canvas.width; else if(s.x>=canvas.width) s.x-=canvas.width;
+    if(s.y<0) s.y+=canvas.height; else if(s.y>=canvas.height) s.y-=canvas.height;
     s.age++;
     if(s.age>=s.lifetime){
       if(popCount[TYPE.PLANT]<MAX_POP[TYPE.PLANT]&&entities.length+newborns.length<MAX_ENTITIES){
@@ -437,19 +437,9 @@ function stepAnimal(e) {
     }
   }
 
-  // Wall repulsion — steers animals away from edges rather than pinning them
-  const wz=50, ws=0.22;
-  if(e.x<wz)                e.vx+=ws*(1-e.x/wz);
-  if(e.x>canvas.width-wz)  e.vx-=ws*(1-(canvas.width-e.x)/wz);
-  if(e.y<wz)                e.vy+=ws*(1-e.y/wz);
-  if(e.y>canvas.height-wz) e.vy-=ws*(1-(canvas.height-e.y)/wz);
-
   e.x+=e.vx; e.y+=e.vy;
-  const r=g.size;
-  if(e.x<r)              {e.x=r;              e.vx*=-0.6;}
-  if(e.x>canvas.width-r) {e.x=canvas.width-r; e.vx*=-0.6;}
-  if(e.y<r)              {e.y=r;              e.vy*=-0.6;}
-  if(e.y>canvas.height-r){e.y=canvas.height-r;e.vy*=-0.6;}
+  if(e.x<0) e.x+=canvas.width; else if(e.x>=canvas.width) e.x-=canvas.width;
+  if(e.y<0) e.y+=canvas.height; else if(e.y>=canvas.height) e.y-=canvas.height;
 
   if(e.poisonedTimer>0) e.poisonedTimer--;
   e.energy-=metabolicRate(g);
