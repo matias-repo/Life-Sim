@@ -279,27 +279,39 @@ function seed() {
 
 // ── Grid ───────────────────────────────────────────────────────────────────────
 const CELL=80;
-let grid={};
+const _GCOLS=2000; // row stride for integer grid keys (must exceed max WORLD_H/CELL)
+let grid=new Map();
+let nutGrid=new Map();
 let popCount=[0,0,0];
 
 function buildGrid() {
-  grid={}; popCount[0]=popCount[1]=popCount[2]=0;
+  grid.clear(); nutGrid.clear();
+  popCount[0]=popCount[1]=popCount[2]=0;
   for(const e of entities) {
     if(e.dead) continue;
     popCount[e.type]++;
-    const k=`${Math.floor(e.x/CELL)}_${Math.floor(e.y/CELL)}`;
-    if(!grid[k]) grid[k]=[];
-    grid[k].push(e);
+    const k=Math.floor(e.x/CELL)*_GCOLS+Math.floor(e.y/CELL);
+    let cell=grid.get(k);
+    if(!cell){ cell=[]; grid.set(k,cell); }
+    cell.push(e);
+  }
+  for(const n of nutrients) {
+    const k=Math.floor(n.x/CELL)*_GCOLS+Math.floor(n.y/CELL);
+    let cell=nutGrid.get(k);
+    if(!cell){ cell=[]; nutGrid.set(k,cell); }
+    cell.push(n);
   }
 }
+const _nearbyBuf=[];
 function nearby(x,y,r) {
-  const out=[], cx=Math.floor(x/CELL), cy=Math.floor(y/CELL), cr=Math.ceil(r/CELL)+1;
+  _nearbyBuf.length=0;
+  const cx=Math.floor(x/CELL), cy=Math.floor(y/CELL), cr=Math.ceil(r/CELL)+1;
   for(let dx=-cr;dx<=cr;dx++)
     for(let dy=-cr;dy<=cr;dy++){
-      const b=grid[`${cx+dx}_${cy+dy}`];
-      if(b) for(const e of b) out.push(e);
+      const b=grid.get((cx+dx)*_GCOLS+(cy+dy));
+      if(b) for(const e of b) _nearbyBuf.push(e);
     }
-  return out;
+  return _nearbyBuf;
 }
 
 // ── Nutrients ──────────────────────────────────────────────────────────────────
@@ -311,6 +323,7 @@ function addNutrient(x,y,amount) {
 
 // ── Fertility zones (static terrain) ─────────────────────────────────────────
 let fertZones = []; // {x,y,r,str}
+let fertGrads = []; // cached CanvasGradient objects (built once per genFertZones call)
 function genFertZones() {
   fertZones = [];
   for(let i=0;i<9;i++){
@@ -321,6 +334,13 @@ function genFertZones() {
       str: 0.55 + Math.random()*0.45
     });
   }
+  // Build gradient objects once — reused every frame instead of creating 9 per frame
+  fertGrads = fertZones.map(z => {
+    const grd = ctx.createRadialGradient(z.x,z.y,0,z.x,z.y,z.r);
+    grd.addColorStop(0,`rgba(36,90,36,${(z.str*0.055).toFixed(3)})`);
+    grd.addColorStop(1,'rgba(36,90,36,0)');
+    return grd;
+  });
 }
 
 // ── Day / night cycle ─────────────────────────────────────────────────────────
@@ -427,9 +447,14 @@ let newborns=[];
 
 function stepPlant(e) {
   let bonus=0;
-  for(const n of nutrients){
-    const dx=e.x-n.x,dy=e.y-n.y,d2=dx*dx+dy*dy;
-    if(d2<1444) bonus+=n.amount*(1-Math.sqrt(d2)/38)*0.5;
+  // Nutrient lookup via spatial grid (radius 38 < CELL, so 3×3 cell neighborhood suffices)
+  const _ncx=Math.floor(e.x/CELL), _ncy=Math.floor(e.y/CELL);
+  for(let _ndx=-1;_ndx<=1;_ndx++) for(let _ndy=-1;_ndy<=1;_ndy++){
+    const _nb=nutGrid.get((_ncx+_ndx)*_GCOLS+(_ncy+_ndy));
+    if(_nb) for(const n of _nb){
+      const dx=e.x-n.x,dy=e.y-n.y,d2=dx*dx+dy*dy;
+      if(d2<1444) bonus+=n.amount*(1-Math.sqrt(d2)/38)*0.5;
+    }
   }
   for(const z of fertZones){
     const dx=e.x-z.x, dy=e.y-z.y, d2=dx*dx+dy*dy;
@@ -781,12 +806,14 @@ function drawStructures() {
     const isNest=s.type===STRUCT.NEST;
     const col=isNest?'#c8903a':'#9070d0';
     const activeTime=isNest?(1-ni):ni; // nests glow at day, roosts glow at night
-    // Radius glow
+    // Radius glow — gradient cached on structure object, created once
+    if(!s._grad){
+      s._grad=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,STRUCT_R);
+      s._grad.addColorStop(0,isNest?'rgba(200,144,58,1)':'rgba(144,112,208,1)');
+      s._grad.addColorStop(1,'rgba(0,0,0,0)');
+    }
     ctx.globalAlpha=0.05+activeTime*0.10;
-    const grad=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,STRUCT_R);
-    grad.addColorStop(0,isNest?'rgba(200,144,58,1)':'rgba(144,112,208,1)');
-    grad.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=grad;
+    ctx.fillStyle=s._grad;
     ctx.beginPath(); ctx.arc(s.x,s.y,STRUCT_R,0,Math.PI*2); ctx.fill();
     // Dashed boundary ring
     ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.globalAlpha=0.35+activeTime*0.30;
@@ -875,26 +902,32 @@ function draw() {
   // Structures (behind everything else)
   drawStructures();
 
-  // Fertility zones — subtle green terrain glow
-  for(const z of fertZones){
-    const grad=ctx.createRadialGradient(z.x,z.y,0,z.x,z.y,z.r);
-    grad.addColorStop(0,`rgba(36,90,36,${(z.str*0.055).toFixed(3)})`);
-    grad.addColorStop(1,'rgba(36,90,36,0)');
-    ctx.fillStyle=grad;
+  // Viewport bounds for culling world-space objects (with generous margin)
+  const _vx1=cam.x-40, _vx2=cam.x+canvas.width+40;
+  const _vy1=cam.y-40, _vy2=cam.y+canvas.height+40;
+
+  // Fertility zones — cached gradients, viewport-culled
+  for(let _zi=0;_zi<fertZones.length;_zi++){
+    const z=fertZones[_zi];
+    if(z.x+z.r<cam.x||z.x-z.r>cam.x+canvas.width||
+       z.y+z.r<cam.y||z.y-z.r>cam.y+canvas.height) continue;
+    ctx.fillStyle=fertGrads[_zi];
     ctx.beginPath(); ctx.arc(z.x,z.y,z.r,0,Math.PI*2); ctx.fill();
   }
 
-  // Nutrients
+  // Nutrients — viewport culled
   for(const n of nutrients){
     if(n.amount<2) continue;
+    if(n.x<_vx1||n.x>_vx2||n.y<_vy1||n.y>_vy2) continue;
     ctx.globalAlpha=Math.min(0.20,n.amount/70*0.20);
     ctx.beginPath(); ctx.arc(n.x,n.y,Math.min(28,n.amount*0.35),0,Math.PI*2);
     ctx.fillStyle='#3a8a44'; ctx.fill();
   }
   ctx.globalAlpha=1;
 
-  // Corpses — fading grey blobs with a cross
+  // Corpses — viewport culled
   for(const c of corpses){
+    if(c.x<_vx1||c.x>_vx2||c.y<_vy1||c.y>_vy2) continue;
     const fade=Math.max(0,1-c.age/CORPSE_LIFE);
     ctx.globalAlpha=fade*0.30;
     ctx.beginPath(); ctx.arc(c.x,c.y,Math.min(11,c.energy*0.14+4),0,Math.PI*2);
@@ -905,8 +938,9 @@ function draw() {
   }
   ctx.globalAlpha=1;
 
-  // Entities — pixel art sprites
+  // Entities — pixel art sprites, viewport-culled (inspected entity always drawn)
   for(const e of entities){
+    if(e!==inspected&&(e.x<_vx1||e.x>_vx2||e.y<_vy1||e.y>_vy2)) continue;
     const g=e.genes, t=e.type;
     const immature=t===TYPE.PLANT&&isImmature(e);
     const er=Math.min(1,e.energy/e.maxEnergy);
@@ -947,7 +981,7 @@ function draw() {
         ctx.fillStyle=`hsl(${hmHSL[0]},90%,${l}%)`;
       } else {
         const l=shade===2?lBase+14:shade===1?lBase:Math.max(8,lBase-13);
-        ctx.fillStyle=`hsl(${h.toFixed(0)},${s.toFixed(0)}%,${l.toFixed(0)}%)`;
+        ctx.fillStyle=`hsl(${Math.round(h)},${Math.round(s)}%,${Math.round(l)}%)`;
       }
       ctx.fillRect(dx*ps-ps*0.5, dy*ps-ps*0.5, ps, ps);
     }
@@ -991,28 +1025,30 @@ function draw() {
     ctx.globalAlpha=1;
   }
 
-  // Territorial scent marks — faint orange pixels
+  // Territorial scent marks — viewport culled
   for(const s of scents){
+    if(s.x<_vx1||s.x>_vx2||s.y<_vy1||s.y>_vy2) continue;
     ctx.globalAlpha=(1-s.age/SCENT_LIFE)*0.12;
     ctx.fillStyle='#f84';
     ctx.fillRect(s.x-1.5,s.y-1.5,3,3);
   }
   ctx.globalAlpha=1;
 
-  // Spores — tiny pixel art seeds, unobtrusive
+  // Spores — viewport culled, Math.round replaces toFixed
   for(const s of spores){
+    if(s.x<_vx1||s.x>_vx2||s.y<_vy1||s.y>_vy2) continue;
     const ageFrac=s.age/s.lifetime;
     const fade=ageFrac<0.12?ageFrac/0.12:ageFrac>0.80?(1-ageFrac)/0.20:1;
     const tox=s.genes.toxicity??0;
     let hh=s.genes.hue-tox*185; if(hh<0) hh+=360;
-    // 3-pixel L-shaped seed
+    const _hhr=Math.round(hh);
     ctx.globalAlpha=fade*0.55;
-    ctx.fillStyle=`hsl(${hh.toFixed(0)},48%,70%)`;
-    ctx.fillRect(s.x-0.75, s.y-1.5,  1.5, 1.5); // top
-    ctx.fillRect(s.x-0.75, s.y,      1.5, 1.5); // center
+    ctx.fillStyle=`hsl(${_hhr},48%,70%)`;
+    ctx.fillRect(s.x-0.75, s.y-1.5,  1.5, 1.5);
+    ctx.fillRect(s.x-0.75, s.y,      1.5, 1.5);
     ctx.globalAlpha=fade*0.35;
-    ctx.fillStyle=`hsl(${hh.toFixed(0)},42%,52%)`;
-    ctx.fillRect(s.x+0.75, s.y,      1.5, 1.5); // shadow accent
+    ctx.fillStyle=`hsl(${_hhr},42%,52%)`;
+    ctx.fillRect(s.x+0.75, s.y,      1.5, 1.5);
   }
   ctx.globalAlpha=1;
 
