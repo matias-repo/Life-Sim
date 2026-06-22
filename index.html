@@ -319,6 +319,25 @@ function stepSpores() {
   });
 }
 
+// ── Atmosphere ────────────────────────────────────────────────────────────────
+// o2/co2 are independent [0.05–0.95]; ~0.50 = baseline equilibrium
+const atmos = { o2: 0.50, co2: 0.50 };
+let _atmosLowO2  = false; // edge-trigger flags for event log
+let _atmosLowCO2 = false;
+
+function stepAtmos() {
+  const P = popCount[TYPE.PLANT];
+  const A = popCount[TYPE.GRAZER] + popCount[TYPE.HUNTER];
+  const net = (P - A * 1.1) * 0.000028; // positive = plants winning → more O2
+  atmos.o2  = clamp(atmos.o2  + net + (0.50 - atmos.o2)  * 0.0030, 0.05, 0.95);
+  atmos.co2 = clamp(atmos.co2 - net + (0.50 - atmos.co2) * 0.0030, 0.05, 0.95);
+  // Log atmosphere alerts
+  if(atmos.o2  < 0.28 && !_atmosLowO2)  { _atmosLowO2=true;  logEvt('O₂ critically low — animals struggling','#48f'); }
+  if(atmos.o2  > 0.40 &&  _atmosLowO2)  { _atmosLowO2=false; logEvt('O₂ recovering','#4af'); }
+  if(atmos.co2 < 0.28 && !_atmosLowCO2) { _atmosLowCO2=true; logEvt('CO₂ depleted — plants struggling','#4c4'); }
+  if(atmos.co2 > 0.40 &&  _atmosLowCO2) { _atmosLowCO2=false; }
+}
+
 // ── Simulation ─────────────────────────────────────────────────────────────────
 let newborns=[];
 
@@ -328,7 +347,8 @@ function stepPlant(e) {
     const dx=e.x-n.x,dy=e.y-n.y,d2=dx*dx+dy*dy;
     if(d2<1444) bonus+=n.amount*(1-Math.sqrt(d2)/38)*0.5;
   }
-  e.energy=Math.min(e.maxEnergy, e.energy+e.genes.growthRate*(1+bonus));
+  const co2mult = 0.55 + atmos.co2 * 0.90; // 0.55 at min CO2, 1.0 at 0.5, 1.45 at max
+  e.energy=Math.min(e.maxEnergy, e.energy+e.genes.growthRate*(1+bonus)*co2mult);
   e.energy-=e.genes.size*0.0010+e.genes.spreadChance*2.5; // size & spread upkeep cost
   const crowd0=Math.max(0,popCount[TYPE.PLANT]/MAX_POP[TYPE.PLANT]-0.68);
   e.energy-=crowd0*crowd0*2.2; // density disease — quadratic drain above 68% cap
@@ -449,6 +469,8 @@ function stepAnimal(e) {
 
   if(e.poisonedTimer>0) e.poisonedTimer--;
   e.energy-=metabolicRate(g);
+  e.energy+=(atmos.o2-0.50)*0.10; // O2 efficiency: +0.045 max boost, -0.045 max penalty
+  if(atmos.o2<0.30) e.energy-=(0.30-atmos.o2)*0.55; // extra suffocation below 30%
   const crowd=Math.max(0,popCount[t]/MAX_POP[t]-0.68);
   e.energy-=crowd*crowd*1.8; // density disease — quadratic drain above 68% cap
   if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2.5); e.dead=true; return; }
@@ -479,6 +501,7 @@ function step() {
   entities.push(...newborns);
   checkExtinction();
   checkMilestones();
+  stepAtmos();
 }
 
 // ── Population history (for graph) ────────────────────────────────────────────
@@ -683,8 +706,29 @@ function draw() {
 
   if(inspected&&!inspected.dead) drawInspect(inspected);
   drawGraph();
+  drawAtmos();
   drawEventLog();
   drawHeatmapLabel();
+}
+
+function drawAtmos() {
+  const AX=10, AY=10, AW=132, AH=48;
+  ctx.fillStyle='rgba(2,2,10,0.82)';
+  ctx.fillRect(AX,AY,AW,AH);
+  const drawBar=(label,val,color,y)=>{
+    ctx.font='9px monospace'; ctx.fillStyle='#333'; ctx.globalAlpha=1;
+    ctx.fillText(label,AX+6,y+9);
+    const bx=AX+33, bw=72, bh=5, by=y+3;
+    ctx.fillStyle='#0a0a18'; ctx.fillRect(bx,by,bw,bh);
+    // colour shifts red when near extremes
+    const stress=Math.max(0,1-Math.abs(val-0.5)/0.3); // 1=mid, 0=extreme
+    ctx.fillStyle=val<0.35?'#f84':val>0.65?color:color;
+    ctx.globalAlpha=0.78; ctx.fillRect(bx,by,bw*val,bh);
+    ctx.globalAlpha=1; ctx.fillStyle='#444'; ctx.font='8px monospace';
+    ctx.fillText((val*100).toFixed(0)+'%',bx+bw+4,y+9);
+  };
+  drawBar('O₂ ', atmos.o2,  '#4af', AY+8);
+  drawBar('CO₂', atmos.co2, '#6d4', AY+27);
 }
 
 function drawEventLog() {
