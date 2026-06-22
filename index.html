@@ -54,9 +54,9 @@ const TYPE = { PLANT: 0, GRAZER: 1, HUNTER: 2 };
 // hue ranges are carefully separated so types stay visually distinct
 const GENE_SPEC = {
   [TYPE.PLANT]: {
-    growthRate:   [0.08,  0.015, 0.26 ],
+    growthRate:   [0.11,  0.02,  0.30 ],
     size:         [4.0,   2.0,   9.0  ],
-    spreadChance: [0.002, 0.0003,0.010],
+    spreadChance: [0.0015,0.0002,0.008],
     mutationRate: [0.08,  0.01,  0.50 ],
     hue:          [120,   72,    162  ],  // greens
   },
@@ -84,9 +84,9 @@ const GENE_SPEC = {
 
 // Base energy parameters (scaled by size at runtime)
 const EP = {
-  [TYPE.PLANT]:  { start: 55,  maxBase: 115, repBase: 85,  costBase: 44 },
-  [TYPE.GRAZER]: { start: 78,  maxBase: 175, repBase: 122, costBase: 62 },
-  [TYPE.HUNTER]: { start: 95,  maxBase: 245, repBase: 172, costBase: 92 },
+  [TYPE.PLANT]:  { start: 75,  maxBase: 130, repBase: 88,  costBase: 46 },
+  [TYPE.GRAZER]: { start: 110, maxBase: 200, repBase: 128, costBase: 64 },
+  [TYPE.HUNTER]: { start: 130, maxBase: 280, repBase: 178, costBase: 94 },
 };
 
 const SIZE_DEF = { [TYPE.PLANT]: 4, [TYPE.GRAZER]: 5, [TYPE.HUNTER]: 6 };
@@ -141,7 +141,7 @@ function repCost(type, g)      { return EP[type].costBase * (g.size / SIZE_DEF[t
 
 // Bigger + faster + higher metabolism = higher burn rate. This is the core trade-off.
 function metabolicRate(g) {
-  return (g.speed * g.speed * 0.018 + g.size * 0.003 + 0.007) * g.metabolism;
+  return (g.speed * g.speed * 0.010 + g.size * 0.0016 + 0.003) * g.metabolism;
 }
 
 // HSL color derived purely from genes — hue encodes lineage, lightness encodes health
@@ -199,9 +199,9 @@ function spawnRandom(type) {
 let entities = [];
 
 function seed() {
-  for (let i = 0; i < 34; i++) entities.push(spawnRandom(TYPE.PLANT));
-  for (let i = 0; i < 13; i++) entities.push(spawnRandom(TYPE.GRAZER));
-  for (let i = 0; i <  4; i++) entities.push(spawnRandom(TYPE.HUNTER));
+  for (let i = 0; i < 42; i++) entities.push(spawnRandom(TYPE.PLANT));
+  for (let i = 0; i < 14; i++) entities.push(spawnRandom(TYPE.GRAZER));
+  for (let i = 0; i <  3; i++) entities.push(spawnRandom(TYPE.HUNTER));
 }
 seed();
 
@@ -254,7 +254,7 @@ function stepPlant(e) {
   e.energy = Math.min(e.maxEnergy, e.energy + e.genes.growthRate * (1 + bonus));
 
   // Plants age and die, releasing nutrients
-  if (e.age > 1800 + e.genes.size * 380) {
+  if (e.age > 4000 + e.genes.size * 800) {
     addNutrient(e.x, e.y, e.genes.size * 2.5);
     e.dead = true;
     return;
@@ -274,7 +274,7 @@ function stepAnimal(e) {
   const t = e.type;
 
   // Age: creatures slow and become infertile past 70% of lifespan
-  const lifespan = g.size * 480;
+  const lifespan = g.size * 1800;
   const ageFrac  = e.age / lifespan;
   if (ageFrac >= 1) {
     addNutrient(e.x, e.y, g.size * 2);
@@ -330,7 +330,7 @@ function stepAnimal(e) {
 
       if (d < g.size + e.target.genes.size + 1.5) {
         // Eat — aggression slightly improves energy extraction (more aggressive = less waste)
-        const gain = e.target.energy * (0.36 + g.aggression * 0.14);
+        const gain = e.target.energy * (0.55 + g.aggression * 0.12);
         e.energy = Math.min(e.maxEnergy, e.energy + gain);
         addNutrient(e.target.x, e.target.y, e.target.energy * 0.3);
         e.target.dead = true;
@@ -372,6 +372,17 @@ function stepAnimal(e) {
   }
 }
 
+// Prevent silent total extinction — respawn a few if a type completely disappears
+let extinctionTick = 0;
+function checkExtinction() {
+  if (extinctionTick++ % 300 !== 0) return;
+  const c = [0, 0, 0];
+  for (const e of entities) c[e.type]++;
+  if (c[0] < 5)  for (let i = 0; i < 10; i++) entities.push(spawnRandom(TYPE.PLANT));
+  if (c[1] < 3)  for (let i = 0; i <  5; i++) entities.push(spawnRandom(TYPE.GRAZER));
+  if (c[2] === 0) for (let i = 0; i <  2; i++) entities.push(spawnRandom(TYPE.HUNTER));
+}
+
 function step() {
   buildGrid();
   newborns = [];
@@ -385,6 +396,7 @@ function step() {
   nutrients = nutrients.filter(n => { n.amount *= 0.997; return n.amount > 0.7; });
   entities  = entities.filter(e => !e.dead);
   entities.push(...newborns);
+  checkExtinction();
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────────
