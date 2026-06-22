@@ -62,6 +62,10 @@
   .btn-heat.active { color: #f8c; border-color: #f8c; background: rgba(255,136,204,0.12); }
   .btn-goal { color: #665; border-color: #222; }
   .btn-goal.active { color: #ffd040; border-color: #886010; background: rgba(255,208,64,0.10); }
+  .btn-nest  { color: #c8903a; border-color: #4a3010; }
+  .btn-nest.active  { background: rgba(200,144,58,0.18); border-color: #c8903a; }
+  .btn-roost { color: #9070d0; border-color: #301870; }
+  .btn-roost.active { background: rgba(144,112,208,0.18); border-color: #9070d0; }
 </style>
 </head>
 <body>
@@ -86,6 +90,9 @@
   <div class="sep"></div>
   <button class="btn-heat"  id="btnHeat">◉ Heat</button>
   <button class="btn-goal"  id="btnGoal">⚑ Goal</button>
+  <div class="sep"></div>
+  <button class="btn-nest"  id="selNest">⌂ Nest</button>
+  <button class="btn-roost" id="selRoost">⌂ Roost</button>
 </div>
 
 <div id="stats">
@@ -143,6 +150,7 @@ const GENE_SPEC = {
     fertility:    [1.0,   0.4,   2.4  ],
     aggression:   [0.7,   0.0,   1.0  ],
     stealth:      [0.0,   0.0,   0.85 ],
+    nocturnal:    [0.0,   0.0,   1.0  ],
     mutationRate: [0.08,  0.01,  0.50 ],
     hue:          [15,    0,     58   ],
   },
@@ -215,7 +223,8 @@ function createEntity(type,x,y,genes=null,generation=0) {
     genes:g, energy:EP[type].start, maxEnergy:energyMax(type,g),
     age:0, dead:false, target:null, generation, fleeing:false, poisonedTimer:0,
     burstTimer:0, burstCooldown:0, hitTimer:0,
-    memX:null, memY:null, memAge:0, ancestors:[] };
+    memX:null, memY:null, memAge:0, ancestors:[],
+    sleepDrive:0, sleeping:false };
 }
 function spawnOffspring(parent) {
   const t=parent.type;
@@ -299,6 +308,18 @@ function genFertZones() {
     });
   }
 }
+
+// ── Day / night cycle ─────────────────────────────────────────────────────────
+const DAY_LENGTH = 1400; // ticks per full day
+function nightIntensity() {
+  const p = (tick % DAY_LENGTH) / DAY_LENGTH;
+  return (1 - Math.cos(p * Math.PI * 2)) * 0.5; // 0=dawn/dusk, 1=midnight
+}
+
+// ── Structures (nests & roosts) ───────────────────────────────────────────────
+const STRUCT = { NEST: 0, ROOST: 1 };
+const STRUCT_R = 34;
+let structures = []; // {type, x, y}
 
 // ── Corpses (decomposers) ─────────────────────────────────────────────────────
 const CORPSE_LIFE = 420;
@@ -422,17 +443,20 @@ function stepAnimal(e) {
   const lifespan=g.size*1800, ageFrac=e.age/lifespan;
   if(ageFrac>=1){ addNutrient(e.x,e.y,g.size*2); e.dead=true; return; }
   const speedMult=ageFrac>0.7?Math.max(0.2,1-(ageFrac-0.7)*2.2):1;
-  const juvenileBoost=ageFrac<0.15?1.35:1.0;           // juveniles are fast but sterile
+  const juvenileBoost=ageFrac<0.15?1.35:1.0;
   let effSpeed=g.speed*speedMult*juvenileBoost;
-  const canReproduce=ageFrac>=0.15&&ageFrac<0.78;       // juveniles can't reproduce
+  const canReproduce=ageFrac>=0.15&&ageFrac<0.78;
   const eatType=t===TYPE.GRAZER?TYPE.PLANT:TYPE.GRAZER;
   const predType=t===TYPE.GRAZER?TYPE.HUNTER:null;
+
+  // Nocturnal hunters get a speed boost at night
+  const ni=nightIntensity();
+  if(t===TYPE.HUNTER) effSpeed*=(1+(g.nocturnal??0)*ni*0.70);
 
   if(e.burstTimer>0) e.burstTimer--;
   if(e.burstCooldown>0) e.burstCooldown--;
   if(e.hitTimer>0) e.hitTimer--;
   if(e.memX!==null){ e.memAge++; if(e.memAge>500){e.memX=null;e.memY=null;} }
-  // Hunter: drop territorial scent
   if(t===TYPE.HUNTER && e.age%20===0){
     if(scents.length>=MAX_SCENTS) scents.shift();
     scents.push({x:e.x,y:e.y,age:0,ownerId:e.id});
@@ -442,27 +466,60 @@ function stepAnimal(e) {
   if(predType!==null && g.aggression<0.72){
     const fleeR=g.senseRadius*(1.15-g.aggression*0.45);
     const camo=g.camouflage??0;
-    // Camouflage: grazer is only visible if inside the hunter's reduced sense range
     const threats=nearby(e.x,e.y,fleeR).filter(n=>
       !n.dead&&n.type===predType&&dist(e,n)<n.genes.senseRadius*(1-camo*0.62)*(1-(n.genes.stealth??0)*0.60));
     if(threats.length){
       const threat=threats.reduce((b,n)=>dist2(e,n)<dist2(e,b)?n:b);
       const d=dist(e,threat)||1;
-      // Burst sprint when threat enters close range
       if(e.burstCooldown===0 && d<fleeR*0.45){
         e.burstTimer=(18+(g.stamina??1)*8)|0;
         e.burstCooldown=120;
       }
-      if(e.burstTimer>0){
-        effSpeed*=1+(g.stamina??1)*0.65;
-        e.energy-=(g.stamina??1)*0.08;
-      }
+      if(e.burstTimer>0){ effSpeed*=1+(g.stamina??1)*0.65; e.energy-=(g.stamina??1)*0.08; }
       e.vx=(e.x-threat.x)/d*effSpeed; e.vy=(e.y-threat.y)/d*effSpeed;
       e.fleeing=true; e.target=null;
     }
   }
 
-  if(!e.fleeing){
+  // ── Circadian sleep drive ─────────────────────────────────────────────────────
+  if(t===TYPE.GRAZER){
+    e.sleepDrive=clamp((e.sleepDrive??0)+ni*0.0014-0.00028,0,1);
+  } else if(t===TYPE.HUNTER){
+    const noc=g.nocturnal??0;
+    e.sleepDrive=clamp((e.sleepDrive??0)+noc*(1-ni)*0.0012-0.00028,0,1);
+  }
+
+  let sleepingThisFrame=false;
+
+  // Wake check — dawn wakes grazers, dusk wakes nocturnal hunters, threat always wakes
+  if(e.sleeping){
+    const dawnWake=t===TYPE.GRAZER?(ni<0.18):(g.nocturnal??0)>0.3&&ni>0.45;
+    if((e.sleepDrive??0)<0.04||dawnWake||e.fleeing){
+      e.sleeping=false;
+    } else {
+      e.vx*=0.65; e.vy*=0.65; // slow drift to halt
+      sleepingThisFrame=true;
+    }
+  }
+
+  // If tired enough and calm, seek home structure or sleep in place
+  if(!e.fleeing&&!e.sleeping&&!sleepingThisFrame&&(e.sleepDrive??0)>0.70){
+    const sType=t===TYPE.GRAZER?STRUCT.NEST:STRUCT.ROOST;
+    let home=null, bestD=Infinity;
+    for(const s of structures){ if(s.type!==sType) continue; const d2=dist2(e,s); if(d2<bestD){bestD=d2;home=s;} }
+    if(home){
+      if(bestD<(STRUCT_R*0.58)**2){
+        e.sleeping=true; e.vx*=0.4; e.vy*=0.4; sleepingThisFrame=true;
+      } else {
+        const d=Math.sqrt(bestD);
+        e.vx=(home.x-e.x)/d*effSpeed*0.62; e.vy=(home.y-e.y)/d*effSpeed*0.62;
+      }
+    } else if((e.sleepDrive??0)>0.92){
+      e.sleeping=true; sleepingThisFrame=true;
+    }
+  }
+
+  if(!e.fleeing&&!sleepingThisFrame){
     const lost=!e.target||e.target.dead||dist2(e,e.target)>(g.senseRadius*1.6)**2;
     if(lost){
       e.target=null;
@@ -470,7 +527,7 @@ function stepAnimal(e) {
         n!==e&&!n.dead&&n.type===eatType);
       if(cands.length){
         if(t===TYPE.HUNTER){
-          // Herding: prefer isolated grazers; pack hunting: converge on already-targeted prey
+          // Prefer isolated grazers; pack hunting: converge on already-targeted prey
           let best=cands[0], bestScore=Infinity;
           for(const n of cands){
             const herdR=(n.genes.senseRadius*0.55)**2;
@@ -506,17 +563,12 @@ function stepAnimal(e) {
               e.poisonedTimer=Math.max(e.poisonedTimer??0, 90+poisonDmg*6|0);
               if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2); e.dead=true; }
             }
-            // Thorns: grazer takes counter-damage when biting a thorny plant
             const thornDmg=bite*(e.target?.genes.thorns??0)*0.35;
-            if(thornDmg>0.3){
-              e.energy-=thornDmg;
-              if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2); e.dead=true; }
-            }
+            if(thornDmg>0.3){ e.energy-=thornDmg; if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2); e.dead=true; } }
             e.memX=e.x; e.memY=e.y; e.memAge=0;
             e.target=null;
           }
         } else {
-          // Kick defense: high-aggression grazer deals damage to the hunter on contact
           const kickDmg=e.target.genes.size*(e.target.genes.aggression??0)*0.44;
           e.energy-=kickDmg;
           if(kickDmg>1.5) e.hitTimer=25;
@@ -529,14 +581,12 @@ function stepAnimal(e) {
       }
     } else {
       if(e.memX!==null){
-        // Head back toward last food memory
         const md=Math.hypot(e.memX-e.x,e.memY-e.y);
         if(md>10){ e.vx=(e.memX-e.x)/md*effSpeed*0.78; e.vy=(e.memY-e.y)/md*effSpeed*0.78; }
         else { e.memX=null; e.memY=null; }
       } else {
         e.vx+=(Math.random()-0.5)*0.33; e.vy+=(Math.random()-0.5)*0.33;
       }
-      // Hunters: territorial repulsion from foreign scent marks
       if(t===TYPE.HUNTER){
         for(const s of scents){
           if(s.ownerId===e.id) continue;
@@ -557,11 +607,14 @@ function stepAnimal(e) {
   if(e.y<0) e.y+=canvas.height; else if(e.y>=canvas.height) e.y-=canvas.height;
 
   if(e.poisonedTimer>0) e.poisonedTimer--;
-  e.energy-=metabolicRate(g);
-  e.energy+=(atmos.o2-0.50)*0.10; // O2 efficiency: +0.045 max boost, -0.045 max penalty
-  if(atmos.o2<0.30) e.energy-=(0.30-atmos.o2)*0.55; // extra suffocation below 30%
+  const metabMult=sleepingThisFrame?0.28:1.0;
+  e.energy-=metabolicRate(g)*metabMult;
+  if(sleepingThisFrame) e.energy=Math.min(e.maxEnergy,e.energy+0.10); // sleep regen
+  e.sleepDrive=Math.max(0,(e.sleepDrive??0)-(sleepingThisFrame?0.0030:0));
+  e.energy+=(atmos.o2-0.50)*0.10;
+  if(atmos.o2<0.30) e.energy-=(0.30-atmos.o2)*0.55;
   const crowd=Math.max(0,popCount[t]/MAX_POP[t]-0.68);
-  e.energy-=crowd*crowd*1.8; // density disease — quadratic drain above 68% cap
+  e.energy-=crowd*crowd*1.8;
   if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2.5); e.dead=true; return; }
 
   const rt=repThreshold(t,g), rc=repCost(t,g);
@@ -632,7 +685,8 @@ const GENE_MILESTONES = [
   { type:TYPE.GRAZER, gene:'stamina',          marks:[1.7, 2.3],       label:'grazer stamina', color:'#ffd040' },
   { type:TYPE.HUNTER, gene:'speed',            marks:[2.4, 3.1],       label:'hunter speed',   color:'#f84'    },
   { type:TYPE.HUNTER, gene:'aggression',       marks:[0.88],           label:'hunter aggr',    color:'#f44'    },
-  { type:TYPE.HUNTER, gene:'stealth',          marks:[0.30,0.60],      label:'hunter stealth', color:'#88c4f8' },
+  { type:TYPE.HUNTER, gene:'stealth',          marks:[0.30,0.60],      label:'hunter stealth',   color:'#88c4f8' },
+  { type:TYPE.HUNTER, gene:'nocturnal',        marks:[0.40,0.75],      label:'hunter nocturnal', color:'#9060d8' },
 ];
 
 function logEvt(msg, color='#8a8') {
@@ -665,7 +719,8 @@ const HEATMAP_MODES = [
   { name:'toxin',   types:[TYPE.PLANT],                         gene:'toxicity',        lo:0,   hi:1.0  },
   { name:'thorns',  types:[TYPE.PLANT],                         gene:'thorns',          lo:0,   hi:1.0  },
   { name:'camo',    types:[TYPE.GRAZER],                        gene:'camouflage',      lo:0,   hi:0.9  },
-  { name:'stealth', types:[TYPE.HUNTER],                        gene:'stealth',         lo:0,   hi:0.85 },
+  { name:'stealth',   types:[TYPE.HUNTER],                        gene:'stealth',   lo:0, hi:0.85 },
+  { name:'nocturnal', types:[TYPE.HUNTER],                        gene:'nocturnal', lo:0, hi:1.0  },
 ];
 
 function heatColor(val, lo, hi) {
@@ -705,10 +760,68 @@ const SPRITE = {
   ],
 };
 
+// ── Structures render ──────────────────────────────────────────────────────────
+function drawStructures() {
+  const ni=nightIntensity();
+  for(const s of structures){
+    const isNest=s.type===STRUCT.NEST;
+    const col=isNest?'#c8903a':'#9070d0';
+    const activeTime=isNest?(1-ni):ni; // nests glow at day, roosts glow at night
+    // Radius glow
+    ctx.globalAlpha=0.05+activeTime*0.10;
+    const grad=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,STRUCT_R);
+    grad.addColorStop(0,isNest?'rgba(200,144,58,1)':'rgba(144,112,208,1)');
+    grad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=grad;
+    ctx.beginPath(); ctx.arc(s.x,s.y,STRUCT_R,0,Math.PI*2); ctx.fill();
+    // Dashed boundary ring
+    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.globalAlpha=0.35+activeTime*0.30;
+    ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.arc(s.x,s.y,STRUCT_R,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    // Center icon — nest: bowl shape; roost: arch/spire
+    ctx.fillStyle=col; ctx.globalAlpha=0.85;
+    if(isNest){
+      // Nest bowl: arc of pixel dots
+      for(let i=-3;i<=3;i++) ctx.fillRect(s.x+i*2.5-1,s.y+Math.abs(i)*1.2,2,2);
+      ctx.fillRect(s.x-8,s.y+5,16,2.5);
+    } else {
+      // Roost: vertical bar + cross + spire tip
+      ctx.fillRect(s.x-1.5,s.y-9,3,14);
+      ctx.fillRect(s.x-6,s.y-2,12,3);
+      ctx.fillRect(s.x-1,s.y-11,2,2);
+    }
+    ctx.globalAlpha=1;
+  }
+}
+
+function drawDayClock() {
+  const ni=nightIntensity();
+  const p=(tick%DAY_LENGTH)/DAY_LENGTH;
+  const CX=canvas.width/2, CY=16, R=9;
+  ctx.fillStyle='rgba(2,2,10,0.82)'; ctx.globalAlpha=0.85;
+  ctx.beginPath(); ctx.arc(CX,CY,R+5,0,Math.PI*2); ctx.fill();
+  // Night fill
+  ctx.fillStyle='#0d0d28'; ctx.globalAlpha=0.90;
+  ctx.beginPath(); ctx.arc(CX,CY,R,0,Math.PI*2); ctx.fill();
+  // Day arc (warm yellow)
+  ctx.fillStyle='#c87c10'; ctx.globalAlpha=0.78;
+  ctx.beginPath(); ctx.moveTo(CX,CY);
+  ctx.arc(CX,CY,R,-Math.PI*0.5,-Math.PI*0.5+p*Math.PI*2,false); ctx.closePath(); ctx.fill();
+  // Current-time dot
+  const dotA=-Math.PI*0.5+p*Math.PI*2;
+  ctx.fillStyle=ni>0.5?'#aaaaff':'#ffe060';
+  ctx.globalAlpha=1;
+  ctx.beginPath(); ctx.arc(CX+Math.cos(dotA)*R,CY+Math.sin(dotA)*R,2.5,0,Math.PI*2); ctx.fill();
+}
+
 // ── Render ─────────────────────────────────────────────────────────────────────
 function draw() {
   ctx.fillStyle='#07070f';
   ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Structures (behind everything else)
+  drawStructures();
 
   // Fertility zones — subtle green terrain glow
   for(const z of fertZones){
@@ -809,6 +922,13 @@ function draw() {
       ctx.fillStyle='#ff6020'; ctx.fill();
     }
 
+    // Sleeping glow — soft blue/purple halo
+    if(e.sleeping){
+      ctx.globalAlpha=0.28*camoFade;
+      ctx.fillStyle=t===TYPE.GRAZER?'#8888cc':'#703090';
+      ctx.beginPath(); ctx.arc(e.x,e.y,g.size*2.5,0,Math.PI*2); ctx.fill();
+    }
+
     // Energy bar (animals only)
     if(t!==TYPE.PLANT){
       const bw=g.size*3.0, bx=e.x-bw/2, by=e.y+g.size+4;
@@ -844,12 +964,22 @@ function draw() {
   }
   ctx.globalAlpha=1;
 
+  // Night sky overlay — dims and blue-tints at night
+  const _ni=nightIntensity();
+  if(_ni>0.02){
+    ctx.globalAlpha=_ni*0.40;
+    ctx.fillStyle='#03031a';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.globalAlpha=1;
+  }
+
   if(inspected&&!inspected.dead) drawInspect(inspected);
   drawGraph();
   drawAtmos();
   drawChallenge();
   drawEventLog();
   drawHeatmapLabel();
+  drawDayClock();
 }
 
 function drawChallenge() {
@@ -1019,7 +1149,7 @@ function drawInspect(e) {
 
   const g=e.genes, spec=GENE_SPEC[e.type];
   const isAnimal=e.type!==TYPE.PLANT;
-  const panelH=isAnimal?(e.type===TYPE.GRAZER?216:190):183;
+  const panelH=isAnimal?(e.type===TYPE.GRAZER?216:203):183;
   const px=Math.min(e.x+r+14, canvas.width-172);
   const py=clamp(e.y-60, 8, canvas.height-panelH-8);
 
@@ -1071,7 +1201,8 @@ function drawInspect(e) {
     drawGeneRow('fert',    g.fertility,    ...spec.fertility.slice(1),     '#4c4');
     drawGeneRow('aggr',    g.aggression,   ...spec.aggression.slice(1),   g.aggression>0.6?'#f64':'#48f');
     if(e.type===TYPE.HUNTER){
-      drawGeneRow('stealth', g.stealth??0, ...spec.stealth.slice(1),      '#88c4f8');
+      drawGeneRow('stealth',   g.stealth??0,   ...spec.stealth.slice(1),   '#88c4f8');
+      drawGeneRow('nocturnal', g.nocturnal??0, ...spec.nocturnal.slice(1), '#9060d8');
     }
     if(e.type===TYPE.GRAZER){
       drawGeneRow('resist',  g.poisonResistance, ...spec.poisonResistance.slice(1), '#b06aff');
@@ -1150,18 +1281,32 @@ function loop() {
 }
 
 // ── Controls ───────────────────────────────────────────────────────────────────
-let selected=null;
+let selected=null, selStruct=null;
 const TYPE_BTNS={ selPlant:TYPE.PLANT, selGrazer:TYPE.GRAZER, selHunter:TYPE.HUNTER };
 const btnEls={};
+const structBtns={ selNest:STRUCT.NEST, selRoost:STRUCT.ROOST };
+
+function clearAllTools(){
+  selected=null; selStruct=null;
+  Object.values(btnEls).forEach(b=>b.classList.remove('active'));
+  Object.keys(structBtns).forEach(id=>document.getElementById(id).classList.remove('active'));
+}
 
 Object.entries(TYPE_BTNS).forEach(([id,type])=>{
   const btn=document.getElementById(id);
   btnEls[id]=btn;
   btn.addEventListener('click',()=>{
     const was=selected===type;
-    selected=was?null:type;
-    Object.values(btnEls).forEach(b=>b.classList.remove('active'));
-    if(!was) btn.classList.add('active');
+    clearAllTools();
+    if(!was){ selected=type; btn.classList.add('active'); }
+  });
+});
+
+Object.entries(structBtns).forEach(([id,stype])=>{
+  document.getElementById(id).addEventListener('click',()=>{
+    const was=selStruct===stype;
+    clearAllTools();
+    if(!was){ selStruct=stype; document.getElementById(id).classList.add('active'); }
   });
 });
 
@@ -1196,15 +1341,18 @@ canvas.addEventListener('click', ev=>{
     }
   }
 
-  // Place
+  // Place entity
   if(selected!==null){
     for(let i=0;i<3;i++){
       const x=clamp(mx+(Math.random()-0.5)*30,5,canvas.width-5);
       const y=clamp(my+(Math.random()-0.5)*30,5,canvas.height-5);
       entities.push(createEntity(selected,x,y));
     }
+  } else if(selStruct!==null){
+    // Place structure (nest or roost)
+    structures.push({type:selStruct, x:mx, y:my});
   } else {
-    inspected=null; // click empty space with no tool = deselect
+    inspected=null;
   }
 });
 
@@ -1216,7 +1364,7 @@ document.getElementById('btnPause').addEventListener('click',()=>{
 });
 
 document.getElementById('btnClear').addEventListener('click',()=>{
-  entities=[]; nutrients=[]; spores=[]; corpses=[]; history=[]; inspected=null;
+  entities=[]; nutrients=[]; spores=[]; corpses=[]; structures=[]; history=[]; inspected=null;
   maxGeneration=0; maxGenByType=[0,0,0]; geneBank=[[],[],[]];
   eventLog.length=0; Object.keys(milestoneHit).forEach(k=>delete milestoneHit[k]); lastLoggedGen=0; tick=0;
   genFertZones();
