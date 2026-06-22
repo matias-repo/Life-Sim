@@ -384,12 +384,15 @@ function stepAnimal(e) {
         n!==e&&!n.dead&&n.type===eatType&&!(eatType===TYPE.PLANT&&isImmature(n)));
       if(cands.length){
         if(t===TYPE.HUNTER){
-          // Herding: prefer isolated grazers — penalise targets with nearby herd-mates
-          e.target=cands.reduce((best,n)=>{
-            const hN=nearby(n.x,n.y,n.genes.senseRadius*0.65).filter(m=>!m.dead&&m.type===TYPE.GRAZER).length;
-            const hB=nearby(best.x,best.y,best.genes.senseRadius*0.65).filter(m=>!m.dead&&m.type===TYPE.GRAZER).length;
-            return dist2(e,n)*(1+hN*0.72)<dist2(e,best)*(1+hB*0.72)?n:best;
-          });
+          // Herding: prefer isolated grazers — score using cands list to avoid extra nearby() calls
+          let best=cands[0], bestScore=Infinity;
+          for(const n of cands){
+            const herdR=(n.genes.senseRadius*0.55)**2;
+            const herd=cands.filter(m=>m!==n&&dist2(n,m)<herdR).length;
+            const score=dist2(e,n)*(1+herd*0.72);
+            if(score<bestScore){ bestScore=score; best=n; }
+          }
+          e.target=best;
         } else {
           e.target=cands.reduce((b,n)=>dist2(e,n)<dist2(e,b)?n:b);
         }
