@@ -107,19 +107,21 @@ const GENE_SPEC = {
     growthRate:   [0.11,   0.02,   0.30  ],
     size:         [4.0,    2.0,    9.0   ],
     spreadChance: [0.003,  0.0004, 0.010 ],
-    sporeChance:  [0.0018, 0.0001, 0.0070],
+    sporeChance:  [0.0012, 0.0001, 0.0070],
+    toxicity:     [0.10,   0.0,    1.0   ],
     mutationRate: [0.08,   0.01,   0.50  ],
     hue:          [120,    72,     162   ],
   },
   [TYPE.GRAZER]: {
-    speed:        [1.2,   0.3,   3.0  ],
-    size:         [5.0,   2.5,   11.0 ],
-    senseRadius:  [60,    18,    150  ],
-    metabolism:   [1.0,   0.3,   2.4  ],
-    fertility:    [1.0,   0.4,   2.4  ],
-    aggression:   [0.4,   0.0,   1.0  ],
-    mutationRate: [0.08,  0.01,  0.50 ],
-    hue:          [210,   172,   268  ],
+    speed:           [1.2,  0.3,  3.0  ],
+    size:            [5.0,  2.5,  11.0 ],
+    senseRadius:     [60,   18,   150  ],
+    metabolism:      [1.0,  0.3,  2.4  ],
+    fertility:       [1.0,  0.4,  2.4  ],
+    aggression:      [0.4,  0.0,  1.0  ],
+    poisonResistance:[0.05, 0.0,  1.0  ],
+    mutationRate:    [0.08, 0.01, 0.50 ],
+    hue:             [210,  172,  268  ],
   },
   [TYPE.HUNTER]: {
     speed:        [1.6,   0.5,   3.6  ],
@@ -141,7 +143,7 @@ const EP = {
 
 const SIZE_DEF     = { [TYPE.PLANT]: 4, [TYPE.GRAZER]: 5, [TYPE.HUNTER]: 6 };
 const MAX_ENTITIES = 450;
-const MAX_POP      = [260, 160, 45];
+const MAX_POP      = [200, 160, 45];
 
 // ── Math ───────────────────────────────────────────────────────────────────────
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -177,7 +179,11 @@ function repCost(t,g)      { return EP[t].costBase*(g.size/SIZE_DEF[t]); }
 function metabolicRate(g)  { return (g.speed*g.speed*0.016+g.size*0.0024+0.005)*g.metabolism; }
 
 function geneColor(type,g,er) {
-  if(type===TYPE.PLANT) return `hsl(${g.hue},58%,${(20+er*24).toFixed(0)}%)`;
+  if(type===TYPE.PLANT){
+    const tox=g.toxicity??0;
+    let h=g.hue-tox*185; if(h<0) h+=360;
+    return `hsl(${h.toFixed(0)},${(58+tox*22).toFixed(0)}%,${(20+er*24).toFixed(0)}%)`;
+  }
   return `hsl(${g.hue},${(58+g.aggression*30).toFixed(0)}%,${(28+er*30).toFixed(0)}%)`;
 }
 
@@ -188,7 +194,7 @@ function createEntity(type,x,y,genes=null,generation=0) {
   return { id:idCounter++, type, x, y,
     vx:(Math.random()-0.5)*0.4, vy:(Math.random()-0.5)*0.4,
     genes:g, energy:EP[type].start, maxEnergy:energyMax(type,g),
-    age:0, dead:false, target:null, generation, fleeing:false };
+    age:0, dead:false, target:null, generation, fleeing:false, poisonedTimer:0 };
 }
 function spawnOffspring(parent) {
   const t=parent.type, g=mutateGenes(parent.genes,t);
@@ -202,7 +208,8 @@ function spawnOffspring(parent) {
 function spawnRandom(type) {
   return createEntity(type,
     Math.random()*(canvas.width-20)+10,
-    Math.random()*(canvas.height-20)+10);
+    Math.random()*(canvas.height-20)+10,
+    null, maxGenByType[type]);
 }
 
 let entities=[];
@@ -245,10 +252,10 @@ function addNutrient(x,y,amount) {
 }
 
 // ── Spores ────────────────────────────────────────────────────────────────────
-const MAX_SPORES=140;
+const MAX_SPORES=100;
 let spores=[];
 
-function isImmature(e) { return e.type===TYPE.PLANT && e.age < e.genes.size*120; }
+function isImmature(e) { return e.type===TYPE.PLANT && e.age < e.genes.size*80; }
 
 function releaseSpore(plant) {
   if(spores.length>=MAX_SPORES) return;
@@ -346,6 +353,14 @@ function stepAnimal(e) {
             e.energy=Math.min(e.maxEnergy,e.energy+bite*(0.62+g.aggression*0.10));
             e.target.energy-=bite;
             if(e.target.energy<5){ addNutrient(e.target.x,e.target.y,e.target.energy); e.target.dead=true; }
+            // Poison damage
+            const tox=e.target?.genes.toxicity??0;
+            const poisonDmg=bite*tox*(1-(g.poisonResistance??0))*0.95;
+            if(poisonDmg>0.5){
+              e.energy-=poisonDmg;
+              e.poisonedTimer=Math.max(e.poisonedTimer??0, 90+poisonDmg*6|0);
+              if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2); e.dead=true; }
+            }
             e.target=null;
           }
         } else {
@@ -368,6 +383,7 @@ function stepAnimal(e) {
   if(e.y<r)              {e.y=r;              e.vy*=-0.8;}
   if(e.y>canvas.height-r){e.y=canvas.height-r;e.vy*=-0.8;}
 
+  if(e.poisonedTimer>0) e.poisonedTimer--;
   e.energy-=metabolicRate(g);
   if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2.5); e.dead=true; return; }
 
@@ -380,7 +396,7 @@ function stepAnimal(e) {
 
 function checkExtinction() {
   if(popCount[0]<5)   for(let i=0;i<12;i++) entities.push(spawnRandom(TYPE.PLANT));
-  if(popCount[1]<2)   for(let i=0;i< 6;i++) entities.push(spawnRandom(TYPE.GRAZER));
+  if(popCount[1]===0) for(let i=0;i< 5;i++) entities.push(spawnRandom(TYPE.GRAZER));
   if(popCount[2]===0)                        entities.push(spawnRandom(TYPE.HUNTER));
 }
 
@@ -390,7 +406,10 @@ function step() {
   nutrients=nutrients.filter(n=>{n.amount*=0.997;return n.amount>0.7;});
   entities=entities.filter(e=>!e.dead);
   stepSpores();
-  for(const e of newborns) if(e.generation>maxGeneration) maxGeneration=e.generation;
+  for(const e of newborns){
+    if(e.generation>maxGeneration) maxGeneration=e.generation;
+    if(e.generation>maxGenByType[e.type]) maxGenByType[e.type]=e.generation;
+  }
   entities.push(...newborns);
   checkExtinction();
 }
@@ -399,6 +418,7 @@ function step() {
 const HISTORY_LEN = 400;
 let history = [];  // recorded once per frame
 let maxGeneration = 0;
+let maxGenByType  = [0, 0, 0];
 
 function recordHistory() {
   history.push({ p: popCount[0], g: popCount[1], h: popCount[2] });
@@ -442,6 +462,13 @@ function draw() {
       ctx.globalAlpha=0.55;
       ctx.fillStyle='#111'; ctx.fillRect(e.x-bw/2,e.y-visR-5,bw,2);
       ctx.fillStyle=e.fleeing?'#f84':color; ctx.fillRect(e.x-bw/2,e.y-visR-5,bw*er,2);
+    }
+    // Poisoned glow
+    if((e.poisonedTimer??0)>0){
+      const pt=e.poisonedTimer/150;
+      ctx.globalAlpha=pt*0.45;
+      ctx.beginPath(); ctx.arc(e.x,e.y,visR*2,0,Math.PI*2);
+      ctx.fillStyle='#b040ff'; ctx.fill();
     }
   }
 
@@ -573,7 +600,7 @@ function drawInspect(e) {
 
   const g=e.genes, spec=GENE_SPEC[e.type];
   const isAnimal=e.type!==TYPE.PLANT;
-  const panelH=isAnimal?176:156;
+  const panelH=isAnimal?(e.type===TYPE.GRAZER?190:176):170;
   const px=Math.min(e.x+r+14, canvas.width-172);
   const py=clamp(e.y-60, 8, canvas.height-panelH-8);
 
@@ -611,6 +638,7 @@ function drawInspect(e) {
     drawGeneRow('growth',  g.growthRate,   ...spec.growthRate.slice(1),   '#4b4');
     drawGeneRow('spread',  g.spreadChance, ...spec.spreadChance.slice(1), '#4b4');
     drawGeneRow('spores',  g.sporeChance,  ...spec.sporeChance.slice(1),  '#ad4');
+    drawGeneRow('toxin',   g.toxicity,     ...spec.toxicity.slice(1),     '#c06fe0');
     drawGeneRow('size',    g.size,         ...spec.size.slice(1),          '#aaa');
     drawGeneRow('mutRate', g.mutationRate, ...spec.mutationRate.slice(1),  '#b84');
     drawGeneRow('hue',     g.hue,          ...spec.hue.slice(1),           '#888');
@@ -622,6 +650,8 @@ function drawInspect(e) {
     drawGeneRow('metab',   g.metabolism,   ...spec.metabolism.slice(1),   '#fa6');
     drawGeneRow('fert',    g.fertility,    ...spec.fertility.slice(1),     '#4c4');
     drawGeneRow('aggr',    g.aggression,   ...spec.aggression.slice(1),   g.aggression>0.6?'#f64':'#48f');
+    if(e.type===TYPE.GRAZER)
+      drawGeneRow('resist', g.poisonResistance, ...spec.poisonResistance.slice(1), '#b06aff');
     drawGeneRow('mutRate', g.mutationRate, ...spec.mutationRate.slice(1), '#b84');
     // Age bar
     const agCol=ageFrac>0.7?'#f84':'#444';
@@ -716,7 +746,7 @@ document.getElementById('btnPause').addEventListener('click',()=>{
 });
 
 document.getElementById('btnClear').addEventListener('click',()=>{
-  entities=[]; nutrients=[]; spores=[]; history=[]; inspected=null; maxGeneration=0;
+  entities=[]; nutrients=[]; spores=[]; history=[]; inspected=null; maxGeneration=0; maxGenByType=[0,0,0];
   document.getElementById('st-gen').textContent='gen: 0';
   localStorage.removeItem(SAVE_KEY);
 });
