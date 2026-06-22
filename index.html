@@ -201,6 +201,12 @@ function mutateGenes(pg, type, rateMult=1.0) {
   return child;
 }
 
+function randomGenes(type) {
+  let g = defaultGenes(type);
+  for(let i=0;i<5;i++) g = mutateGenes(g, type, 10.0);
+  return g;
+}
+
 // ── Derived stats ──────────────────────────────────────────────────────────────
 function energyMax(t,g)    { return EP[t].maxBase *(g.size/SIZE_DEF[t]); }
 function repThreshold(t,g) { return EP[t].repBase *(g.size/SIZE_DEF[t])/(g.fertility??1); }
@@ -1181,8 +1187,10 @@ function drawGraph() {
 
 // ── Inspect panel ──────────────────────────────────────────────────────────────
 let inspected = null;
+let inspectButtons = [];
 
 function drawInspect(e) {
+  inspectButtons = [];
   const r=e.genes.size, er=Math.min(1,e.energy/e.maxEnergy);
   const immature=e.type===TYPE.PLANT&&isImmature(e);
   const color=immature
@@ -1202,11 +1210,11 @@ function drawInspect(e) {
   const g=e.genes, spec=GENE_SPEC[e.type];
   const isAnimal=e.type!==TYPE.PLANT;
   const panelH=isAnimal?(e.type===TYPE.GRAZER?216:203):183;
-  const px=Math.min(e.x+r+14, cam.x+canvas.width-172);
+  const px=Math.min(e.x+r+14, cam.x+canvas.width-189);
   const py=clamp(e.y-60, cam.y+8, cam.y+canvas.height-panelH-8);
 
   ctx.fillStyle='rgba(3,3,11,0.92)'; ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=1;
-  ctx.fillRect(px,py,168,panelH); ctx.strokeRect(px,py,168,panelH);
+  ctx.fillRect(px,py,185,panelH); ctx.strokeRect(px,py,185,panelH);
 
   let iy=py+14;
   ctx.font='10px monospace';
@@ -1217,10 +1225,10 @@ function drawInspect(e) {
   ctx.fillStyle='#444';
   ctx.fillText(`gen ${e.generation}  ·  age ${e.age}`, px+7, iy); iy+=11;
   ctx.fillStyle='#181828';
-  ctx.fillRect(px+7, iy, 154, 1); iy+=8;
+  ctx.fillRect(px+7, iy, 171, 1); iy+=8;
 
-  // Gene rows with bar
-  const drawGeneRow = (label, val, lo, hi, col) => {
+  // Gene rows with bar + optional [-][+] edit buttons
+  const drawGeneRow = (label, val, lo, hi, col, key=null) => {
     const frac=clamp((val-lo)/(hi-lo),0,1);
     const bx=px+7, bw=66, bh=3, by=iy-4;
     ctx.fillStyle='#121220'; ctx.fillRect(bx,by,bw,bh);
@@ -1231,38 +1239,49 @@ function drawInspect(e) {
     ctx.fillText(label, bx+bw+5, iy);
     ctx.fillStyle=col;
     ctx.fillText(val.toFixed(2), bx+bw+57, iy);
+    if(key!==null){
+      const bh2=9, bw2=8, by2=iy-8, bx1=px+168, bx2=px+177;
+      ctx.fillStyle='#1a1a30';
+      ctx.fillRect(bx1,by2,bw2,bh2); ctx.fillRect(bx2,by2,bw2,bh2);
+      ctx.strokeStyle='#3a3a60'; ctx.lineWidth=0.5;
+      ctx.strokeRect(bx1,by2,bw2,bh2); ctx.strokeRect(bx2,by2,bw2,bh2);
+      ctx.fillStyle='#90a0c8'; ctx.font='9px monospace';
+      ctx.fillText('−',bx1+1,by2+7); ctx.fillText('+',bx2+1,by2+7);
+      inspectButtons.push({key,delta:-1,x:bx1,y:by2,w:bw2,h:bh2,lo,hi});
+      inspectButtons.push({key,delta:+1,x:bx2,y:by2,w:bw2,h:bh2,lo,hi});
+    }
     iy+=13;
   };
 
   ctx.font='9px monospace';
   if(e.type===TYPE.PLANT){
-    drawGeneRow('growth',  g.growthRate,   ...spec.growthRate.slice(1),   '#4b4');
-    drawGeneRow('spread',  g.spreadChance, ...spec.spreadChance.slice(1), '#4b4');
-    drawGeneRow('spores',  g.sporeChance,  ...spec.sporeChance.slice(1),  '#ad4');
-    drawGeneRow('toxin',   g.toxicity,     ...spec.toxicity.slice(1),     '#c06fe0');
-    drawGeneRow('thorns',  g.thorns??0,    ...spec.thorns.slice(1),        '#d4c040');
-    drawGeneRow('size',    g.size,         ...spec.size.slice(1),          '#aaa');
-    drawGeneRow('mutRate', g.mutationRate, ...spec.mutationRate.slice(1),  '#b84');
-    drawGeneRow('hue',     g.hue,          ...spec.hue.slice(1),           '#888');
+    drawGeneRow('growth',  g.growthRate,   ...spec.growthRate.slice(1),   '#4b4',      'growthRate');
+    drawGeneRow('spread',  g.spreadChance, ...spec.spreadChance.slice(1), '#4b4',      'spreadChance');
+    drawGeneRow('spores',  g.sporeChance,  ...spec.sporeChance.slice(1),  '#ad4',      'sporeChance');
+    drawGeneRow('toxin',   g.toxicity,     ...spec.toxicity.slice(1),     '#c06fe0',   'toxicity');
+    drawGeneRow('thorns',  g.thorns??0,    ...spec.thorns.slice(1),        '#d4c040',  'thorns');
+    drawGeneRow('size',    g.size,         ...spec.size.slice(1),          '#aaa',     'size');
+    drawGeneRow('mutRate', g.mutationRate, ...spec.mutationRate.slice(1),  '#b84',     'mutationRate');
+    drawGeneRow('hue',     g.hue,          ...spec.hue.slice(1),           '#888',     'hue');
   } else {
     const ageFrac=e.age/(g.size*1800);
-    drawGeneRow('speed',   g.speed,        ...spec.speed.slice(1),        '#7af');
-    drawGeneRow('sense',   g.senseRadius,  ...spec.senseRadius.slice(1),  '#7af');
-    drawGeneRow('size',    g.size,         ...spec.size.slice(1),          '#aaa');
-    drawGeneRow('metab',   g.metabolism,   ...spec.metabolism.slice(1),   '#fa6');
-    drawGeneRow('fert',    g.fertility,    ...spec.fertility.slice(1),     '#4c4');
-    drawGeneRow('aggr',    g.aggression,   ...spec.aggression.slice(1),   g.aggression>0.6?'#f64':'#48f');
+    drawGeneRow('speed',   g.speed,        ...spec.speed.slice(1),        '#7af',      'speed');
+    drawGeneRow('sense',   g.senseRadius,  ...spec.senseRadius.slice(1),  '#7af',      'senseRadius');
+    drawGeneRow('size',    g.size,         ...spec.size.slice(1),          '#aaa',     'size');
+    drawGeneRow('metab',   g.metabolism,   ...spec.metabolism.slice(1),   '#fa6',      'metabolism');
+    drawGeneRow('fert',    g.fertility,    ...spec.fertility.slice(1),     '#4c4',     'fertility');
+    drawGeneRow('aggr',    g.aggression,   ...spec.aggression.slice(1),   g.aggression>0.6?'#f64':'#48f', 'aggression');
     if(e.type===TYPE.HUNTER){
-      drawGeneRow('stealth',   g.stealth??0,   ...spec.stealth.slice(1),   '#88c4f8');
-      drawGeneRow('nocturnal', g.nocturnal??0, ...spec.nocturnal.slice(1), '#9060d8');
+      drawGeneRow('stealth',   g.stealth??0,   ...spec.stealth.slice(1),   '#88c4f8', 'stealth');
+      drawGeneRow('nocturnal', g.nocturnal??0, ...spec.nocturnal.slice(1), '#9060d8', 'nocturnal');
     }
     if(e.type===TYPE.GRAZER){
-      drawGeneRow('resist',  g.poisonResistance, ...spec.poisonResistance.slice(1), '#b06aff');
-      drawGeneRow('stamina', g.stamina,          ...spec.stamina.slice(1),          '#ffd040');
-      drawGeneRow('camo',    g.camouflage,       ...spec.camouflage.slice(1),       '#80c8a0');
+      drawGeneRow('resist',  g.poisonResistance, ...spec.poisonResistance.slice(1), '#b06aff', 'poisonResistance');
+      drawGeneRow('stamina', g.stamina,          ...spec.stamina.slice(1),          '#ffd040', 'stamina');
+      drawGeneRow('camo',    g.camouflage,       ...spec.camouflage.slice(1),       '#80c8a0', 'camouflage');
     }
-    drawGeneRow('mutRate', g.mutationRate, ...spec.mutationRate.slice(1), '#b84');
-    // Age bar
+    drawGeneRow('mutRate', g.mutationRate, ...spec.mutationRate.slice(1), '#b84',     'mutationRate');
+    // Age bar — display only, no edit
     const agCol=ageFrac>0.7?'#f84':'#444';
     drawGeneRow('age',     ageFrac*100,    0, 100,                         agCol);
   }
@@ -1275,10 +1294,10 @@ function drawInspect(e) {
       :[{k:'speed',c:'#7af'},{k:'aggression',c:'#f64'},{k:'size',c:'#aaa'}];
     const LH=geneKeys.length*18+22, lx=px, ly=py+panelH+4;
     ctx.fillStyle='rgba(3,3,11,0.90)'; ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=1;
-    ctx.fillRect(lx,ly,168,LH); ctx.strokeRect(lx,ly,168,LH);
+    ctx.fillRect(lx,ly,185,LH); ctx.strokeRect(lx,ly,185,LH);
     ctx.fillStyle='#2a2a3a'; ctx.font='9px monospace';
     ctx.fillText(`lineage  gen ${chain[0].gen} → ${e.generation}`,lx+7,ly+12);
-    ctx.fillStyle='#181828'; ctx.fillRect(lx+7,ly+15,154,1);
+    ctx.fillStyle='#181828'; ctx.fillRect(lx+7,ly+15,171,1);
     let ry=ly+28;
     for(const {k,c} of geneKeys){
       const vals=chain.map(a=>a.genes[k]??0);
@@ -1386,6 +1405,18 @@ canvas.addEventListener('click', ev=>{
   const mx=ev.clientX-rect.left+cam.x, my=ev.clientY-rect.top+cam.y; // world coords
   const pt={x:mx,y:my};
 
+  // Gene-edit buttons (checked before entity inspect so clicks on panel don't deselect)
+  if(inspected && !inspected.dead){
+    for(const btn of inspectButtons){
+      if(mx>=btn.x && mx<=btn.x+btn.w && my>=btn.y && my<=btn.y+btn.h){
+        const step=(btn.hi-btn.lo)*0.05;
+        inspected.genes[btn.key]=clamp(inspected.genes[btn.key]+btn.delta*step, btn.lo, btn.hi);
+        if(btn.key==='size') inspected.maxEnergy=energyMax(inspected.type,inspected.genes);
+        return;
+      }
+    }
+  }
+
   // Inspect
   for(let i=entities.length-1;i>=0;i--){
     const e=entities[i];
@@ -1399,7 +1430,7 @@ canvas.addEventListener('click', ev=>{
     for(let i=0;i<3;i++){
       const x=clamp(mx+(Math.random()-0.5)*30,5,WORLD_W-5);
       const y=clamp(my+(Math.random()-0.5)*30,5,WORLD_H-5);
-      entities.push(createEntity(selected,x,y));
+      entities.push(createEntity(selected,x,y,randomGenes(selected)));
     }
   } else if(selStruct!==null){
     structures.push({type:selStruct, x:mx, y:my});
