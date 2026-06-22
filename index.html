@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Biosphere</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a12; color: #ccc; font-family: monospace; display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
+  h1 { font-size: 1rem; letter-spacing: 4px; padding: 8px 0; color: #4af; opacity: 0.7; }
+  #world { border: 1px solid #1a1a2e; cursor: crosshair; display: block; }
+  #ui { display: flex; gap: 8px; padding: 8px; flex-wrap: wrap; justify-content: center; }
+  button {
+    padding: 6px 14px; border: 1px solid; border-radius: 3px;
+    background: transparent; font-family: monospace; font-size: 0.8rem;
+    cursor: pointer; transition: background 0.15s;
+  }
+  button:hover { opacity: 0.8; }
+  .btn-plant  { color: #4c4; border-color: #4c4; }
+  .btn-plant:hover  { background: #4c42; }
+  .btn-grazer { color: #4af; border-color: #4af; }
+  .btn-grazer:hover { background: #4af2; }
+  .btn-hunter { color: #f64; border-color: #f64; }
+  .btn-hunter:hover { background: #f642; }
+  .btn-clear  { color: #888; border-color: #888; }
+  .btn-pause  { color: #fa4; border-color: #fa4; }
+  #stats { font-size: 0.75rem; color: #555; padding: 2px 8px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<h1>B I O S P H E R E</h1>
+<canvas id="world"></canvas>
+<div id="ui">
+  <button class="btn-plant"  id="selPlant">+ Plant</button>
+  <button class="btn-grazer" id="selGrazer">+ Grazer</button>
+  <button class="btn-hunter" id="selHunter">+ Hunter</button>
+  <button class="btn-pause"  id="btnPause">Pause</button>
+  <button class="btn-clear"  id="btnClear">Clear</button>
+</div>
+<div id="stats">plants: 0 | grazers: 0 | hunters: 0</div>
+
+<script>
+const canvas = document.getElementById('world');
+const ctx = canvas.getContext('2d');
+
+// Fit canvas to available space
+function resize() {
+  const uiH = document.getElementById('ui').offsetHeight + 60;
+  canvas.width  = Math.min(window.innerWidth - 2, 900);
+  canvas.height = Math.max(window.innerHeight - uiH, 300);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Entity types ──────────────────────────────────────────────────────────────
+const TYPE = { PLANT: 0, GRAZER: 1, HUNTER: 2 };
+
+const BASE = {
+  [TYPE.PLANT]:  { color: '#3a3', r: 4,  energy: 60,  speed: 0,   senseR: 0,   eatType: null,        repThresh: 90,  repCost: 40, maxE: 100 },
+  [TYPE.GRAZER]: { color: '#48f', r: 5,  energy: 80,  speed: 1.2, senseR: 60,  eatType: TYPE.PLANT,  repThresh: 140, repCost: 60, maxE: 160 },
+  [TYPE.HUNTER]: { color: '#f52', r: 6,  energy: 100, speed: 1.6, senseR: 100, eatType: TYPE.GRAZER, repThresh: 200, repCost: 80, maxE: 220 },
+};
+
+let entities = [];
+let idCounter = 0;
+
+function mutate(val, range) {
+  return Math.max(0.1, val + (Math.random() - 0.5) * range);
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return [r, g, b];
+}
+
+function shiftColor(hex, dv) {
+  let [r,g,b] = hexToRgb(hex);
+  r = Math.min(255, Math.max(0, r + dv)); g = Math.min(255, Math.max(0, g + dv)); b = Math.min(255, Math.max(0, b + dv));
+  return `rgb(${r},${g},${b})`;
+}
+
+function spawnMutated(parent) {
+  const p = parent;
+  const angle = Math.random() * Math.PI * 2;
+  const d = p.r * 3;
+  const x = Math.max(p.r, Math.min(canvas.width  - p.r, p.x + Math.cos(angle) * d));
+  const y = Math.max(p.r, Math.min(canvas.height - p.r, p.y + Math.sin(angle) * d));
+  return createEntity(p.type, x, y, {
+    speed:    mutate(p.speed,   0.15),
+    senseR:   mutate(p.senseR,  5),
+    r:        mutate(p.r,       0.4),
+    maxE:     mutate(p.maxE,    8),
+    repThresh:mutate(p.repThresh, 10),
+    color:    shiftColor(p.color, Math.floor((Math.random()-0.5)*30)),
+  });
+}
+
+function createEntity(type, x, y, overrides = {}) {
+  const b = BASE[type];
+  return {
+    id: idCounter++,
+    type,
+    x, y,
+    vx: (Math.random() - 0.5) * 0.5,
+    vy: (Math.random() - 0.5) * 0.5,
+    energy:    b.energy,
+    speed:     overrides.speed     ?? b.speed,
+    senseR:    overrides.senseR    ?? b.senseR,
+    r:         overrides.r         ?? b.r,
+    maxE:      overrides.maxE      ?? b.maxE,
+    repThresh: overrides.repThresh ?? b.repThresh,
+    repCost:   b.repCost,
+    color:     overrides.color     ?? b.color,
+    eatType:   b.eatType,
+    age:       0,
+    dead:      false,
+    target:    null,
+  };
+}
+
+function spawnRandom(type) {
+  return createEntity(type,
+    Math.random() * (canvas.width  - 20) + 10,
+    Math.random() * (canvas.height - 20) + 10,
+  );
+}
+
+// Seed
+function seed() {
+  for (let i = 0; i < 30; i++) entities.push(spawnRandom(TYPE.PLANT));
+  for (let i = 0; i < 12; i++) entities.push(spawnRandom(TYPE.GRAZER));
+  for (let i = 0; i <  4; i++) entities.push(spawnRandom(TYPE.HUNTER));
+}
+seed();
+
+// ── Spatial grid for fast neighbor lookup ─────────────────────────────────────
+const CELL = 60;
+let grid = {};
+
+function gridKey(x, y) {
+  return `${Math.floor(x/CELL)}_${Math.floor(y/CELL)}`;
+}
+
+function buildGrid() {
+  grid = {};
+  for (const e of entities) {
+    const k = gridKey(e.x, e.y);
+    if (!grid[k]) grid[k] = [];
+    grid[k].push(e);
+  }
+}
+
+function nearby(x, y, radius) {
+  const out = [];
+  const cx = Math.floor(x/CELL), cy = Math.floor(y/CELL);
+  const cells = Math.ceil(radius/CELL);
+  for (let dx = -cells; dx <= cells; dx++) {
+    for (let dy = -cells; dy <= cells; dy++) {
+      const k = `${cx+dx}_${cy+dy}`;
+      if (grid[k]) out.push(...grid[k]);
+    }
+  }
+  return out;
+}
+
+// ── Simulation step ───────────────────────────────────────────────────────────
+const PLANT_SPREAD_CHANCE = 0.002;
+const MAX_ENTITIES = 600;
+let newborns = [];
+
+function step() {
+  buildGrid();
+  newborns = [];
+
+  for (const e of entities) {
+    if (e.dead) continue;
+    e.age++;
+
+    if (e.type === TYPE.PLANT) {
+      e.energy += 0.08; // photosynthesis
+      if (e.energy > e.maxE) e.energy = e.maxE;
+      if (entities.length + newborns.length < MAX_ENTITIES && e.energy > e.repThresh && Math.random() < PLANT_SPREAD_CHANCE) {
+        e.energy -= e.repCost;
+        newborns.push(spawnMutated(e));
+      }
+      continue;
+    }
+
+    // Sense and target
+    if (!e.target || e.target.dead || dist(e, e.target) > e.senseR * 1.5) {
+      e.target = null;
+      const candidates = nearby(e.x, e.y, e.senseR).filter(n => n !== e && !n.dead && n.type === e.eatType);
+      if (candidates.length) {
+        candidates.sort((a, b) => dist(e, a) - dist(e, b));
+        e.target = candidates[0];
+      }
+    }
+
+    if (e.target && !e.target.dead) {
+      // Move toward target
+      const dx = e.target.x - e.x, dy = e.target.y - e.y;
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      e.vx = (dx/d) * e.speed;
+      e.vy = (dy/d) * e.speed;
+
+      // Eat
+      if (d < e.r + e.target.r + 1) {
+        e.energy += e.target.energy * 0.5;
+        if (e.energy > e.maxE) e.energy = e.maxE;
+        e.target.dead = true;
+        e.target = null;
+      }
+    } else {
+      // Wander
+      e.vx += (Math.random() - 0.5) * 0.3;
+      e.vy += (Math.random() - 0.5) * 0.3;
+      const spd = Math.sqrt(e.vx*e.vx + e.vy*e.vy);
+      if (spd > e.speed) { e.vx = e.vx/spd * e.speed; e.vy = e.vy/spd * e.speed; }
+    }
+
+    e.x += e.vx; e.y += e.vy;
+
+    // Bounce walls
+    if (e.x < e.r)               { e.x = e.r;               e.vx *= -1; }
+    if (e.x > canvas.width - e.r) { e.x = canvas.width - e.r; e.vx *= -1; }
+    if (e.y < e.r)               { e.y = e.r;               e.vy *= -1; }
+    if (e.y > canvas.height - e.r){ e.y = canvas.height - e.r; e.vy *= -1; }
+
+    // Metabolism
+    e.energy -= e.speed * 0.04 + 0.01;
+    if (e.energy <= 0) { e.dead = true; continue; }
+
+    // Reproduce
+    if (entities.length + newborns.length < MAX_ENTITIES && e.energy > e.repThresh) {
+      e.energy -= e.repCost;
+      newborns.push(spawnMutated(e));
+    }
+  }
+
+  entities = entities.filter(e => !e.dead).concat(newborns);
+}
+
+function dist(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function draw() {
+  ctx.fillStyle = '#07070f';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (const e of entities) {
+    const alpha = Math.min(1, e.energy / (e.maxE * 0.6));
+    ctx.globalAlpha = 0.25 + alpha * 0.75;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+    ctx.fillStyle = e.color;
+    ctx.fill();
+
+    if (e.type !== TYPE.PLANT) {
+      // energy bar
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#222';
+      ctx.fillRect(e.x - e.r, e.y - e.r - 4, e.r*2, 2);
+      ctx.fillStyle = e.type === TYPE.GRAZER ? '#4af' : '#f52';
+      ctx.fillRect(e.x - e.r, e.y - e.r - 4, e.r*2 * Math.min(1, e.energy/e.maxE), 2);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+let tick = 0;
+function updateStats() {
+  if (tick++ % 20 !== 0) return;
+  const counts = [0, 0, 0];
+  for (const e of entities) counts[e.type]++;
+  document.getElementById('stats').textContent =
+    `plants: ${counts[0]} | grazers: ${counts[1]} | hunters: ${counts[2]} | total: ${entities.length}`;
+}
+
+// ── Loop ──────────────────────────────────────────────────────────────────────
+let paused = false;
+function loop() {
+  if (!paused) { step(); draw(); updateStats(); }
+  requestAnimationFrame(loop);
+}
+loop();
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+let selected = null;
+const buttons = {
+  selPlant:  TYPE.PLANT,
+  selGrazer: TYPE.GRAZER,
+  selHunter: TYPE.HUNTER,
+};
+const btnEls = {};
+
+Object.entries(buttons).forEach(([id, type]) => {
+  const btn = document.getElementById(id);
+  btnEls[id] = btn;
+  btn.addEventListener('click', () => {
+    selected = selected === type ? null : type;
+    Object.entries(btnEls).forEach(([bid, b]) => b.style.opacity = selected === buttons[bid] ? '1' : '0.5');
+    if (selected === null) Object.values(btnEls).forEach(b => b.style.opacity = '1');
+  });
+});
+
+canvas.addEventListener('click', e => {
+  if (selected === null) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  for (let i = 0; i < 3; i++) {
+    const jx = x + (Math.random()-0.5)*30, jy = y + (Math.random()-0.5)*30;
+    entities.push(createEntity(selected, jx, jy));
+  }
+});
+
+document.getElementById('btnPause').addEventListener('click', () => {
+  paused = !paused;
+  document.getElementById('btnPause').textContent = paused ? 'Resume' : 'Pause';
+});
+
+document.getElementById('btnClear').addEventListener('click', () => {
+  entities = [];
+});
+</script>
+</body>
+</html>
