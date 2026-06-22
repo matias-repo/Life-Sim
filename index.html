@@ -544,33 +544,22 @@ function draw() {
     ctx.globalAlpha=1;
   }
 
-  // Spores
-  ctx.lineCap='round';
+  // Spores — tiny pixel art seeds, unobtrusive
   for(const s of spores){
     const ageFrac=s.age/s.lifetime;
-    const a=ageFrac<0.10?ageFrac/0.10:ageFrac>0.80?(1-ageFrac)/0.20:1;
-    const spd=Math.sqrt(s.vx*s.vx+s.vy*s.vy);
-    // Speed-proportional trail
-    if(spd>0.2){
-      const tl=Math.min(spd*6,30);
-      ctx.globalAlpha=a*0.50;
-      ctx.strokeStyle=`hsl(${s.genes.hue},70%,62%)`;
-      ctx.lineWidth=1.8;
-      ctx.beginPath();
-      ctx.moveTo(s.x-s.vx/spd*tl, s.y-s.vy/spd*tl);
-      ctx.lineTo(s.x, s.y);
-      ctx.stroke();
-    }
-    // Outer glow
-    ctx.globalAlpha=a*0.20;
-    ctx.beginPath(); ctx.arc(s.x,s.y,10,0,Math.PI*2);
-    ctx.fillStyle=`hsl(${s.genes.hue},75%,60%)`; ctx.fill();
-    // Bright core
-    ctx.globalAlpha=a*0.92;
-    ctx.beginPath(); ctx.arc(s.x,s.y,2.4,0,Math.PI*2);
-    ctx.fillStyle=`hsl(${s.genes.hue},55%,88%)`; ctx.fill();
+    const fade=ageFrac<0.12?ageFrac/0.12:ageFrac>0.80?(1-ageFrac)/0.20:1;
+    const tox=s.genes.toxicity??0;
+    let hh=s.genes.hue-tox*185; if(hh<0) hh+=360;
+    // 3-pixel L-shaped seed
+    ctx.globalAlpha=fade*0.55;
+    ctx.fillStyle=`hsl(${hh.toFixed(0)},48%,70%)`;
+    ctx.fillRect(s.x-0.75, s.y-1.5,  1.5, 1.5); // top
+    ctx.fillRect(s.x-0.75, s.y,      1.5, 1.5); // center
+    ctx.globalAlpha=fade*0.35;
+    ctx.fillStyle=`hsl(${hh.toFixed(0)},42%,52%)`;
+    ctx.fillRect(s.x+0.75, s.y,      1.5, 1.5); // shadow accent
   }
-  ctx.globalAlpha=1; ctx.lineCap='butt';
+  ctx.globalAlpha=1;
 
   if(inspected&&!inspected.dead) drawInspect(inspected);
   drawGraph();
