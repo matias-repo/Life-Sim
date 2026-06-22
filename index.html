@@ -327,10 +327,12 @@ function stepPlant(e) {
   }
   e.energy=Math.min(e.maxEnergy, e.energy+e.genes.growthRate*(1+bonus));
   e.energy-=e.genes.size*0.0010+e.genes.spreadChance*2.5; // size & spread upkeep cost
+  const crowd0=Math.max(0,popCount[TYPE.PLANT]/MAX_POP[TYPE.PLANT]-0.68);
+  e.energy-=crowd0*crowd0*2.2; // density disease — quadratic drain above 68% cap
+  if(e.energy<=0){ e.dead=true; return; }
   if(e.age>4000+e.genes.size*800){ addNutrient(e.x,e.y,e.genes.size*2.5); e.dead=true; return; }
   const rt=repThreshold(TYPE.PLANT,e.genes), rc=repCost(TYPE.PLANT,e.genes);
-  if(popCount[TYPE.PLANT]<MAX_POP[TYPE.PLANT]
-    && entities.length+newborns.length<MAX_ENTITIES
+  if(entities.length+newborns.length<MAX_ENTITIES
     && e.energy>rt && Math.random()<e.genes.spreadChance) {
     e.energy-=rc; newborns.push(spawnOffspring(e));
   }
@@ -444,11 +446,12 @@ function stepAnimal(e) {
 
   if(e.poisonedTimer>0) e.poisonedTimer--;
   e.energy-=metabolicRate(g);
+  const crowd=Math.max(0,popCount[t]/MAX_POP[t]-0.68);
+  e.energy-=crowd*crowd*1.8; // density disease — quadratic drain above 68% cap
   if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2.5); e.dead=true; return; }
 
   const rt=repThreshold(t,g), rc=repCost(t,g);
-  if(canReproduce && popCount[t]<MAX_POP[t]
-    && entities.length+newborns.length<MAX_ENTITIES && e.energy>rt){
+  if(canReproduce && entities.length+newborns.length<MAX_ENTITIES && e.energy>rt){
     e.energy-=rc; newborns.push(spawnOffspring(e));
   }
 }
