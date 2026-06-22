@@ -249,6 +249,15 @@ function spawnOffspring(parent) {
   const angle=Math.random()*Math.PI*2, d=parent.genes.size*3.5;
   const x=((parent.x+Math.cos(angle)*d)%WORLD_W+WORLD_W)%WORLD_W;
   const y=((parent.y+Math.sin(angle)*d)%WORLD_H+WORLD_H)%WORLD_H;
+  // Plants: reject spawn if the new seedling would overlap an existing plant
+  if(t===TYPE.PLANT){
+    for(const n of nearby(x,y,g.size+6)){
+      if(!n.dead&&n.type===TYPE.PLANT){
+        const ddx=x-n.x, ddy=y-n.y;
+        if(ddx*ddx+ddy*ddy<(g.size+n.genes.size)*(g.size+n.genes.size)) return null;
+      }
+    }
+  }
   const child=createEntity(t,x,y,g,parent.generation+1);
   child.maxEnergy=energyMax(t,g); child.energy=EP[t].start*0.6;
   // Carry ancestry chain forward (last 5 snapshots)
@@ -398,9 +407,19 @@ function stepSpores() {
     if(s.age>=s.lifetime){
       if(popCount[TYPE.PLANT]<MAX_POP[TYPE.PLANT]&&entities.length+newborns.length<MAX_ENTITIES){
         const g=mutateGenes(s.genes,TYPE.PLANT);
-        const child=createEntity(TYPE.PLANT,s.x,s.y,g,s.generation);
-        child.energy=EP[TYPE.PLANT].start*0.58; child.maxEnergy=energyMax(TYPE.PLANT,g);
-        newborns.push(child);
+        // Only germinate if the landing spot isn't already occupied by a plant
+        let _clear=true;
+        for(const n of nearby(s.x,s.y,g.size+6)){
+          if(!n.dead&&n.type===TYPE.PLANT){
+            const _dx=s.x-n.x, _dy=s.y-n.y;
+            if(_dx*_dx+_dy*_dy<(g.size+n.genes.size)*(g.size+n.genes.size)){_clear=false;break;}
+          }
+        }
+        if(_clear){
+          const child=createEntity(TYPE.PLANT,s.x,s.y,g,s.generation);
+          child.energy=EP[TYPE.PLANT].start*0.58; child.maxEnergy=energyMax(TYPE.PLANT,g);
+          newborns.push(child);
+        }
       }
       return false;
     }
@@ -470,7 +489,8 @@ function stepPlant(e) {
   const rt=repThreshold(TYPE.PLANT,e.genes), rc=repCost(TYPE.PLANT,e.genes);
   if(entities.length+newborns.length<MAX_ENTITIES
     && e.energy>rt && Math.random()<e.genes.spreadChance) {
-    e.energy-=rc; newborns.push(spawnOffspring(e));
+    const _child=spawnOffspring(e);
+    if(_child){ e.energy-=rc; newborns.push(_child); }
   }
   if(spores.length<MAX_SPORES && e.energy>rt*0.55 && Math.random()<e.genes.sporeChance){
     releaseSpore(e); e.energy-=rc*0.28;
@@ -641,6 +661,17 @@ function stepAnimal(e) {
     }
   }
 
+  // Separation: push away from any entity that overlaps (skip current prey/target)
+  for(const n of nearby(e.x,e.y,g.size+14)){
+    if(n===e||n===e.target||n.dead) continue;
+    const sdx=e.x-n.x, sdy=e.y-n.y, sd2=sdx*sdx+sdy*sdy;
+    const minD=g.size+n.genes.size;
+    if(sd2<minD*minD){
+      if(sd2<0.01){ e.vx+=(Math.random()-0.5)*0.5; e.vy+=(Math.random()-0.5)*0.5; }
+      else{ const sd=Math.sqrt(sd2), str=(minD-sd)*(sleepingThisFrame?0.10:0.35);
+            e.vx+=sdx/sd*str; e.vy+=sdy/sd*str; }
+    }
+  }
   e.x+=e.vx; e.y+=e.vy;
   if(e.x<0) e.x+=WORLD_W; else if(e.x>=WORLD_W) e.x-=WORLD_W;
   if(e.y<0) e.y+=WORLD_H; else if(e.y>=WORLD_H) e.y-=WORLD_H;
