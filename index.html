@@ -68,6 +68,47 @@
   .btn-roost.active { background: rgba(144,112,208,0.18); border-color: #9070d0; }
   .btn-disease { color: #6da; border-color: #1a3a1a; }
   .btn-disease.active { background: rgba(80,220,120,0.15); border-color: #6da; }
+  .btn-wall { color: #aaa; border-color: #2a2a3a; }
+  .btn-wall.active { background: rgba(160,160,180,0.15); border-color: #aaa; }
+
+  /* ── Wall Builder Panel ───────────────────────────────────── */
+  #wallPanel {
+    position: fixed; bottom: 30px; right: 10px; width: 238px;
+    background: #08080f; border: 1px solid #222232; border-radius: 4px;
+    padding: 9px 10px; font-family: monospace; font-size: 0.73rem;
+    color: #bbb; z-index: 200; display: none; pointer-events: auto;
+  }
+  #wallPanel.open { display: block; }
+  #wallPanel .wp-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 7px; padding-bottom: 5px; border-bottom: 1px solid #181828;
+  }
+  #wallPanel .wp-title { color: #ddd; letter-spacing: 2px; font-size: 0.76rem; }
+  #wallPanel .wp-close { cursor: pointer; color: #444; font-size: 0.82rem; line-height:1; }
+  #wallPanel .wp-close:hover { color: #999; }
+  #wallPanel .mat-grid {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 4px 0 6px;
+  }
+  #wallPanel .mat-btn {
+    height: 28px; border-radius: 2px; border: 2px solid transparent;
+    cursor: pointer; font-family: monospace; font-size: 0.60rem; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.80); text-shadow: 0 0 3px rgba(0,0,0,0.9);
+    transition: border-color 0.1s;
+  }
+  #wallPanel .mat-btn:hover { border-color: rgba(255,255,255,0.5) !important; }
+  #wallPanel .mat-btn.active { border-color: #fff !important; }
+  #wallPanel .mat-erase { background:#111122; color:#888; border-color:#333 !important; }
+  #wallPanel .mat-erase.active { border-color:#f55 !important; color:#f55; }
+  #wallPanel label { display:block; color:#556; font-size:0.68rem; margin:5px 0 3px; }
+  #wallPanel .brush-row { display:flex; gap:5px; align-items:center; }
+  #wallPanel .brush-btn {
+    width:28px; height:28px; border-radius:2px; border:1px solid #222232;
+    background:#0d0d18; cursor:pointer; color:#666; font-size:0.70rem;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  #wallPanel .brush-btn.active { border-color:#aaa; color:#ddd; }
+  #wallPanel .hint { color:#333; font-size:0.65rem; margin-top:6px; }
   .btn-spider { color: #c8a060; border-color: #4a3010; }
   .btn-spider.active { background: rgba(200,160,80,0.18); border-color: #c8a060; }
   #stats .s-spider { color: #8a6028; }
@@ -201,6 +242,8 @@
   <div class="sep"></div>
   <button class="btn-disease" id="btnDisease">☣ Disease</button>
   <button class="btn-bless" id="btnBless">✦ Bless</button>
+  <div class="sep"></div>
+  <button class="btn-wall" id="btnWall">▦ Walls</button>
 </div>
 
 <!-- Disease panel overlay -->
@@ -324,6 +367,36 @@
   <div id="bpList"><span class="no-bl">none</span></div>
 </div>
 
+<!-- Wall panel overlay -->
+<div id="wallPanel">
+  <div class="wp-header">
+    <span class="wp-title">▦ TERRAIN EDITOR</span>
+    <span class="wp-close" id="wpClose">✕</span>
+  </div>
+  <label>Material</label>
+  <div class="mat-grid" id="matGrid">
+    <button class="mat-btn active" data-mat="stone" style="background:#75737f;border-color:#75737f">Stone</button>
+    <button class="mat-btn"        data-mat="wood"  style="background:#8b6035;border-color:#8b6035">Wood</button>
+    <button class="mat-btn"        data-mat="brick" style="background:#b84428;border-color:#b84428">Brick</button>
+    <button class="mat-btn"        data-mat="water" style="background:#2065c8;border-color:#2065c8">Water</button>
+    <button class="mat-btn"        data-mat="lava"  style="background:#d44010;border-color:#d44010">Lava</button>
+    <button class="mat-btn"        data-mat="ice"   style="background:#90ccf0;border-color:#90ccf0;color:#222">Ice</button>
+    <button class="mat-btn"        data-mat="mud"   style="background:#7a5230;border-color:#7a5230">Mud</button>
+    <button class="mat-btn"        data-mat="grass" style="background:#3a8820;border-color:#3a8820">Grass</button>
+    <button class="mat-btn"        data-mat="sand"  style="background:#ccaa50;border-color:#ccaa50;color:#222">Sand</button>
+    <button class="mat-btn"        data-mat="toxic" style="background:#3cc020;border-color:#3cc020">Toxic</button>
+    <button class="mat-btn mat-erase" data-mat="" id="matErase">Erase</button>
+  </div>
+  <label>Brush Size</label>
+  <div class="brush-row" id="brushRow">
+    <button class="brush-btn active" data-brush="1">1×1</button>
+    <button class="brush-btn"        data-brush="3">3×3</button>
+    <button class="brush-btn"        data-brush="5">5×5</button>
+    <button class="brush-btn"        data-brush="9">9×9</button>
+  </div>
+  <div class="hint">Left-drag to paint · Right-drag to pan</div>
+</div>
+
 <div id="stats">
   <span class="s-plant"  id="st-plants">plants: –</span>
   <span class="s-grazer" id="st-grazers">grazers: –</span>
@@ -352,6 +425,36 @@ window.addEventListener('resize', resize);
 // World dimensions and camera (set properly in resize())
 let WORLD_W = 0, WORLD_H = 0;
 let cam = { x: 0, y: 0 };
+
+// ── Wall / terrain system ──────────────────────────────────────────────────────
+const WALL_TILE = 20;
+const _WKM = 5000;
+const WALL_MATS = {
+  stone:{ color:'#75737f', dark:'#55535f', solid:true  },
+  wood: { color:'#8b6035', dark:'#6a4015', solid:true  },
+  brick:{ color:'#b84428', dark:'#903020', solid:true  },
+  water:{ color:'#2065c8', dark:'#1045a0', solid:false },
+  lava: { color:'#d44010', dark:'#b02000', solid:false },
+  ice:  { color:'#90ccf0', dark:'#70acd0', solid:false },
+  mud:  { color:'#7a5230', dark:'#5a3210', solid:false },
+  grass:{ color:'#3a8820', dark:'#286010', solid:false },
+  sand: { color:'#ccaa50', dark:'#aa8830', solid:false },
+  toxic:{ color:'#3cc020', dark:'#2aa010', solid:false },
+};
+let walls = new Map();
+let _wallMat = 'stone';
+let _wallBrush = 1;
+let _wallMode = false;
+let _wallPainting = false;
+function wKey(cx,cy){ return (cx+500)*_WKM+(cy+500); }
+function wallAt(x,y){ return walls.get(wKey(Math.floor(x/WALL_TILE),Math.floor(y/WALL_TILE)))||null; }
+function paintWall(wx,wy,mat){
+  const half=Math.floor(_wallBrush/2);
+  for(let dx=-half;dx<=half;dx++) for(let dy=-half;dy<=half;dy++){
+    const k=wKey(wx+dx,wy+dy);
+    if(mat) walls.set(k,mat); else walls.delete(k);
+  }
+}
 
 // ── Types & constants ──────────────────────────────────────────────────────────
 const TYPE = { PLANT: 0, GRAZER: 1, HUNTER: 2, SPIDER: 3 };
@@ -495,6 +598,9 @@ function spawnOffspring(parent) {
   const angle=Math.random()*Math.PI*2, d=parent.genes.size*3.5;
   const x=((parent.x+Math.cos(angle)*d)%WORLD_W+WORLD_W)%WORLD_W;
   const y=((parent.y+Math.sin(angle)*d)%WORLD_H+WORLD_H)%WORLD_H;
+  // Block spawn into solid terrain
+  const _spawnMat=wallAt(x,y);
+  if(_spawnMat && WALL_MATS[_spawnMat]?.solid) return null;
   // Plants: reject spawn if the new seedling would overlap an existing plant
   if(t===TYPE.PLANT){
     for(const n of nearby(x,y,g.size+6)){
@@ -741,6 +847,13 @@ function stepPlant(e) {
   const co2mult = 0.55 + atmos.co2 * 0.90; // 0.55 at min CO2, 1.0 at 0.5, 1.45 at max
   e.energy=Math.min(e.maxEnergy, e.energy+e.genes.growthRate*(1+bonus)*co2mult);
   if(_bpVitality>0) e.energy=Math.min(e.maxEnergy,e.energy+_bpVitality);
+  // Terrain effects on plants
+  const _pMat=wallAt(e.x,e.y);
+  if(_pMat && !WALL_MATS[_pMat]?.solid){
+    if(_pMat==='lava')  e.energy-=0.05;
+    else if(_pMat==='grass') e.energy=Math.min(e.maxEnergy,e.energy+0.010);
+    else if(_pMat==='toxic') e.energy-=0.020;
+  }
   e.energy-=(e.genes.size*0.0010+e.genes.spreadChance*2.5)*(1-_bpResil*0.35); // size & spread upkeep cost
   const crowd0=Math.max(0,popCount[TYPE.PLANT]/MAX_POP[TYPE.PLANT]-0.68);
   e.energy-=crowd0*crowd0*2.2; // density disease — quadratic drain above 68% cap
@@ -978,9 +1091,26 @@ function stepAnimal(e) {
             e.vx+=sdx/sd*str; e.vy+=sdy/sd*str; }
     }
   }
-  e.x+=e.vx; e.y+=e.vy;
+  const _nx=e.x+e.vx, _ny=e.y+e.vy;
+  const _matN=wallAt(_nx,_ny);
+  if(_matN && WALL_MATS[_matN]?.solid){
+    if(!WALL_MATS[wallAt(_nx,e.y)]?.solid){ e.x=_nx; }
+    else if(!WALL_MATS[wallAt(e.x,_ny)]?.solid){ e.y=_ny; }
+    else { e.vx*=-0.3; e.vy*=-0.3; }
+  } else { e.x=_nx; e.y=_ny; }
   if(e.x<0) e.x+=WORLD_W; else if(e.x>=WORLD_W) e.x-=WORLD_W;
   if(e.y<0) e.y+=WORLD_H; else if(e.y>=WORLD_H) e.y-=WORLD_H;
+  const _matHere=wallAt(e.x,e.y);
+  if(_matHere && !WALL_MATS[_matHere]?.solid){
+    switch(_matHere){
+      case 'water': e.vx*=0.55; e.vy*=0.55; if(t===TYPE.GRAZER) e.energy+=0.012; break;
+      case 'lava':  e.energy-=0.07; break;
+      case 'mud':   e.vx*=0.35; e.vy*=0.35; break;
+      case 'grass': if(t===TYPE.GRAZER) e.energy+=0.008; break;
+      case 'sand':  e.vx*=0.80; e.vy*=0.80; break;
+      case 'toxic': { const r=g.poisonResistance??0; e.energy-=0.045*(1-r); break; }
+    }
+  }
 
   // Web slowdown
   if(t!==TYPE.SPIDER){
@@ -1449,6 +1579,22 @@ function getArchetype(type, genes) {
 }
 
 // ── Structures render ──────────────────────────────────────────────────────────
+function drawWalls(){
+  for(const [k,mat] of walls){
+    const m=WALL_MATS[mat]; if(!m) continue;
+    const cx=(Math.floor(k/_WKM)-500)*WALL_TILE;
+    const cy=((k%_WKM)-500)*WALL_TILE;
+    if(cx+WALL_TILE<cam.x||cx>cam.x+canvas.width||cy+WALL_TILE<cam.y||cy>cam.y+canvas.height) continue;
+    ctx.fillStyle=m.color;
+    ctx.fillRect(cx,cy,WALL_TILE,WALL_TILE);
+    if(m.solid){
+      ctx.fillStyle=m.dark;
+      ctx.fillRect(cx,cy,WALL_TILE,2);
+      ctx.fillRect(cx,cy,2,WALL_TILE);
+    }
+  }
+}
+
 function drawStructures() {
   const ni=nightIntensity();
   for(const s of structures){
@@ -1548,8 +1694,9 @@ function draw() {
   ctx.save();
   ctx.translate(-cam.x, -cam.y);
 
-  // Structures (behind everything else)
+  // Structures and terrain (behind everything else)
   drawStructures();
+  drawWalls();
 
   // Viewport bounds for culling world-space objects (with generous margin)
   const _vx1=cam.x-40, _vx2=cam.x+canvas.width+40;
@@ -2283,6 +2430,34 @@ document.getElementById('btnBless').addEventListener('click',()=>{
   if(open) bpRenderList();
 });
 
+// Wall panel controls
+const wallPanel = document.getElementById('wallPanel');
+const btnWall   = document.getElementById('btnWall');
+document.getElementById('wpClose').addEventListener('click',()=>{
+  wallPanel.classList.remove('open');
+  btnWall.classList.remove('active');
+  _wallMode=false;
+  canvas.style.cursor='';
+});
+btnWall.addEventListener('click',()=>{
+  _wallMode=!_wallMode;
+  wallPanel.classList.toggle('open',_wallMode);
+  btnWall.classList.toggle('active',_wallMode);
+  canvas.style.cursor=_wallMode?'crosshair':'';
+});
+document.getElementById('matGrid').addEventListener('click',ev=>{
+  const btn=ev.target.closest('[data-mat]');
+  if(!btn) return;
+  _wallMat=btn.dataset.mat;
+  document.querySelectorAll('#matGrid [data-mat]').forEach(b=>b.classList.toggle('active',b===btn));
+});
+document.getElementById('brushRow').addEventListener('click',ev=>{
+  const btn=ev.target.closest('[data-brush]');
+  if(!btn) return;
+  _wallBrush=parseInt(btn.dataset.brush);
+  document.querySelectorAll('#brushRow [data-brush]').forEach(b=>b.classList.toggle('active',b===btn));
+});
+
 function blessingMatches(bl, e) {
   if(bl.target==='all')                      return e.type!==TYPE.PLANT;
   if(bl.target==='type:0')                   return e.type===TYPE.PLANT;
@@ -2312,7 +2487,7 @@ speedBtns.forEach(([btn,spd])=>{
 
 // Canvas click — inspect or place (convert to world coords via cam)
 canvas.addEventListener('click', ev=>{
-  if(_panning) return; // suppress click when pan just finished
+  if(_panning||_wallMode) return; // suppress click when panning or painting walls
   const rect=canvas.getBoundingClientRect();
   const mx=ev.clientX-rect.left+cam.x, my=ev.clientY-rect.top+cam.y; // world coords
   const pt={x:mx,y:my};
@@ -2357,15 +2532,29 @@ canvas.addEventListener('mousedown', ev=>{
   if(ev.button===2||ev.button===1){
     _panStart={mx:ev.clientX, my:ev.clientY, cx:cam.x, cy:cam.y};
     ev.preventDefault();
+  } else if(ev.button===0 && _wallMode){
+    _wallPainting=true;
+    const rect=canvas.getBoundingClientRect();
+    const wx=Math.floor((ev.clientX-rect.left+cam.x)/WALL_TILE);
+    const wy=Math.floor((ev.clientY-rect.top+cam.y)/WALL_TILE);
+    paintWall(wx,wy,_wallMat||null);
+    ev.preventDefault();
   }
 });
 canvas.addEventListener('mousemove', ev=>{
-  if(!_panStart) return;
-  _panning=true;
-  cam.x=clamp(_panStart.cx-(ev.clientX-_panStart.mx), 0, WORLD_W-canvas.width);
-  cam.y=clamp(_panStart.cy-(ev.clientY-_panStart.my), 0, WORLD_H-canvas.height);
+  if(_panStart){
+    _panning=true;
+    cam.x=clamp(_panStart.cx-(ev.clientX-_panStart.mx), 0, WORLD_W-canvas.width);
+    cam.y=clamp(_panStart.cy-(ev.clientY-_panStart.my), 0, WORLD_H-canvas.height);
+  }
+  if(_wallPainting && _wallMode && (ev.buttons&1)){
+    const rect=canvas.getBoundingClientRect();
+    const wx=Math.floor((ev.clientX-rect.left+cam.x)/WALL_TILE);
+    const wy=Math.floor((ev.clientY-rect.top+cam.y)/WALL_TILE);
+    paintWall(wx,wy,_wallMat||null);
+  }
 });
-canvas.addEventListener('mouseup',   ()=>{ _panStart=null; setTimeout(()=>_panning=false,10); });
+canvas.addEventListener('mouseup',   ()=>{ _panStart=null; _wallPainting=false; setTimeout(()=>_panning=false,10); });
 canvas.addEventListener('mouseleave',()=>{ _panStart=null; _panning=false; });
 canvas.addEventListener('contextmenu', ev=>ev.preventDefault());
 
@@ -2377,7 +2566,7 @@ document.getElementById('btnPause').addEventListener('click',()=>{
 });
 
 document.getElementById('btnClear').addEventListener('click',()=>{
-  entities=[]; nutrients=[]; spores=[]; corpses=[]; structures=[]; history=[]; inspected=null; webs=[];
+  entities=[]; nutrients=[]; spores=[]; corpses=[]; structures=[]; history=[]; inspected=null; webs=[]; walls=new Map();
   maxGeneration=0; maxGenByType=[0,0,0,0]; geneBank=[[],[],[],[]];
   eventLog.length=0; Object.keys(milestoneHit).forEach(k=>delete milestoneHit[k]); lastLoggedGen=0; tick=0;
   genFertZones();
