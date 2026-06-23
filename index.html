@@ -68,6 +68,9 @@
   .btn-roost.active { background: rgba(144,112,208,0.18); border-color: #9070d0; }
   .btn-disease { color: #6da; border-color: #1a3a1a; }
   .btn-disease.active { background: rgba(80,220,120,0.15); border-color: #6da; }
+  .btn-spider { color: #c8a060; border-color: #4a3010; }
+  .btn-spider.active { background: rgba(200,160,80,0.18); border-color: #c8a060; }
+  #stats .s-spider { color: #5a4010; }
 
   /* ── Disease Panel ────────────────────────────────────────── */
   #diseasePanel {
@@ -122,6 +125,51 @@
   }
   #diseasePanel .dis-del:hover { color: #f55; }
   #diseasePanel .no-dis { color: #2a5a2a; font-size: 0.68rem; font-style: italic; }
+
+  .btn-bless { color: #fdc; border-color: #5a3a10; }
+  .btn-bless.active { background: rgba(255,220,160,0.18); border-color: #ffa040; }
+
+  #blessPanel {
+    position: fixed; top: 90px; left: 10px; width: 210px;
+    background: #0f0c05; border: 1px solid #3a2a10; border-radius: 4px;
+    padding: 9px 10px; font-family: monospace; font-size: 0.73rem;
+    color: #fdc; z-index: 200; display: none; pointer-events: auto;
+  }
+  #blessPanel.open { display: block; }
+  #blessPanel .bp-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 7px; padding-bottom: 5px; border-bottom: 1px solid #3a2a10;
+  }
+  #blessPanel .bp-title { color: #ffa; letter-spacing: 2px; font-size: 0.76rem; }
+  #blessPanel .bp-close { cursor: pointer; color: #554; font-size: 0.82rem; line-height:1; }
+  #blessPanel .bp-close:hover { color: #ccc; }
+  #blessPanel label { display: block; color: #a87; font-size: 0.68rem; margin: 5px 0 2px; }
+  #blessPanel select {
+    width: 100%; background: #0a0805; color: #fdc; border: 1px solid #3a2a10;
+    border-radius: 2px; padding: 2px 4px; font-family: monospace; font-size: 0.72rem;
+  }
+  #blessPanel .slider-row { display: flex; align-items: center; gap: 5px; }
+  #blessPanel input[type=range] { flex: 1; accent-color: #ffa040; height: 14px; }
+  #blessPanel .val-lbl { color: #ffa; min-width: 36px; text-align: right; font-size: 0.70rem; }
+  #blessPanel .bestow-btn {
+    width: 100%; margin-top: 8px; padding: 5px 0;
+    background: #150f03; border: 1px solid #6a4a10; color: #ffa;
+    border-radius: 3px; cursor: pointer; font-family: monospace;
+    font-size: 0.74rem; letter-spacing: 1px;
+  }
+  #blessPanel .bestow-btn:hover { background: #1e1505; }
+  #blessPanel .bp-sep {
+    margin: 8px 0 5px; font-size: 0.66rem; color: #5a4010;
+    letter-spacing: 2px; border-top: 1px solid #1e1505; padding-top: 6px;
+  }
+  #blessPanel .bl-item {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 3px 0; border-bottom: 1px solid #150f03; gap: 4px;
+  }
+  #blessPanel .bl-name { flex: 1; color: #a87; font-size: 0.67rem; line-height: 1.35; }
+  #blessPanel .bl-del { cursor: pointer; color: #523; font-size: 0.78rem; padding: 0 3px; flex-shrink: 0; }
+  #blessPanel .bl-del:hover { color: #f55; }
+  #blessPanel .no-bl { color: #5a4010; font-size: 0.68rem; font-style: italic; }
 </style>
 </head>
 <body>
@@ -133,6 +181,7 @@
   <button class="btn-plant"  id="selPlant">+ Plant</button>
   <button class="btn-grazer" id="selGrazer">+ Grazer</button>
   <button class="btn-hunter" id="selHunter">+ Hunter</button>
+  <button class="btn-spider" id="selSpider">+ Spider</button>
   <div class="sep"></div>
   <button class="btn-speed active" id="speed1">1×</button>
   <button class="btn-speed"        id="speed2">2×</button>
@@ -151,6 +200,7 @@
   <button class="btn-roost"   id="selRoost">⌂ Roost</button>
   <div class="sep"></div>
   <button class="btn-disease" id="btnDisease">☣ Disease</button>
+  <button class="btn-bless" id="btnBless">✦ Bless</button>
 </div>
 
 <!-- Disease panel overlay -->
@@ -166,6 +216,7 @@
     <option value="0">Plants</option>
     <option value="1">Grazers</option>
     <option value="2">Hunters</option>
+    <option value="3">Spiders</option>
   </select>
 
   <label>Gene</label>
@@ -203,10 +254,81 @@
   <div id="dpList"><span class="no-dis">none</span></div>
 </div>
 
+<div id="blessPanel">
+  <div class="bp-header">
+    <span class="bp-title">✦ BLESSINGS</span>
+    <span class="bp-close" id="bpClose">✕</span>
+  </div>
+
+  <label>Target Species</label>
+  <select id="bpTarget">
+    <optgroup label="Broad">
+      <option value="all">All Animals</option>
+      <option value="type:0">All Plants</option>
+      <option value="type:1">All Grazers</option>
+      <option value="type:2">All Hunters</option>
+      <option value="type:3">All Spiders</option>
+    </optgroup>
+    <optgroup label="Grazer Species">
+      <option value="arch:GRAZER_DEFAULT">Grazer (default)</option>
+      <option value="arch:GRAZER_RABBIT">Rabbit</option>
+      <option value="arch:GRAZER_DEER">Deer</option>
+      <option value="arch:GRAZER_BISON">Bison</option>
+      <option value="arch:GRAZER_HORSE">Horse</option>
+      <option value="arch:GRAZER_TORTOISE">Tortoise</option>
+      <option value="arch:GRAZER_ELEPHANT">Elephant</option>
+    </optgroup>
+    <optgroup label="Hunter Species">
+      <option value="arch:HUNTER_DEFAULT">Hunter (default)</option>
+      <option value="arch:HUNTER_CAT">Big Cat</option>
+      <option value="arch:HUNTER_WOLF">Wolf</option>
+      <option value="arch:HUNTER_BEAR">Bear</option>
+      <option value="arch:HUNTER_SNAKE">Snake</option>
+      <option value="arch:HUNTER_EAGLE">Eagle</option>
+      <option value="arch:HUNTER_CROCODILE">Crocodile</option>
+    </optgroup>
+    <optgroup label="Spider Species">
+      <option value="arch:SPIDER_DEFAULT">Spider</option>
+      <option value="arch:SPIDER_ORB">Orb Weaver</option>
+      <option value="arch:SPIDER_WOLF">Wolf Spider</option>
+    </optgroup>
+    <optgroup label="Plant Species">
+      <option value="arch:PLANT_DEFAULT">Plant (default)</option>
+      <option value="arch:PLANT_TREE">Tree</option>
+      <option value="arch:PLANT_CACTUS">Cactus</option>
+      <option value="arch:PLANT_MUSHROOM">Mushroom</option>
+      <option value="arch:PLANT_VINE">Vine</option>
+      <option value="arch:PLANT_FLOWER">Flower</option>
+      <option value="arch:PLANT_FERN">Fern</option>
+    </optgroup>
+  </select>
+
+  <label>Blessing</label>
+  <select id="bpEffect">
+    <option value="speed">Speed Boost</option>
+    <option value="longevity">Longevity</option>
+    <option value="vitality">Vitality (energy regen)</option>
+    <option value="resilience">Resilience (low metabolism)</option>
+    <option value="fertility">Fertility Boost</option>
+  </select>
+
+  <label>Strength</label>
+  <div class="slider-row">
+    <input type="range" id="bpSeverity" min="1" max="100" value="50">
+    <span class="val-lbl" id="bpSevVal">50%</span>
+  </div>
+
+  <button class="bestow-btn" id="bpBestow">✦ Bestow Blessing</button>
+
+  <div class="bp-sep">ACTIVE BLESSINGS</div>
+  <div id="bpList"><span class="no-bl">none</span></div>
+</div>
+
 <div id="stats">
   <span class="s-plant"  id="st-plants">plants: –</span>
   <span class="s-grazer" id="st-grazers">grazers: –</span>
   <span class="s-hunter" id="st-hunters">hunters: –</span>
+  <span class="s-spider" id="st-spiders">spiders: –</span>
   <span class="s-gen"    id="st-gen">gen: 0</span>
 </div>
 
@@ -232,7 +354,7 @@ let WORLD_W = 0, WORLD_H = 0;
 let cam = { x: 0, y: 0 };
 
 // ── Types & constants ──────────────────────────────────────────────────────────
-const TYPE = { PLANT: 0, GRAZER: 1, HUNTER: 2 };
+const TYPE = { PLANT: 0, GRAZER: 1, HUNTER: 2, SPIDER: 3 };
 
 const GENE_SPEC = {
   [TYPE.PLANT]: {
@@ -270,17 +392,31 @@ const GENE_SPEC = {
     mutationRate: [0.08,  0.01,  0.50 ],
     hue:          [15,    0,     58   ],
   },
+  [TYPE.SPIDER]: {
+    speed:       [0.9,  0.2, 2.2],
+    size:        [5.5,  3.0, 12.0],
+    senseRadius: [90,   22,  160 ],
+    metabolism:  [0.75, 0.2, 1.8 ],
+    fertility:   [1.0,  0.4, 2.4 ],
+    webFreq:     [0.010,0.001,0.045],
+    webStrength: [0.55, 0.10, 1.0 ],
+    webDecay:    [0.003,0.0005,0.012],
+    aggression:  [0.55, 0.0, 1.0 ],
+    mutationRate:[0.08, 0.01, 0.50],
+    hue:         [28,   8,   55  ],
+  },
 };
 
 const EP = {
   [TYPE.PLANT]:  { start: 65,  maxBase: 120, repBase: 76,  costBase: 45 },
   [TYPE.GRAZER]: { start: 80,  maxBase: 185, repBase: 148, costBase: 65 },
   [TYPE.HUNTER]: { start: 100, maxBase: 255, repBase: 210, costBase: 90 },
+  [TYPE.SPIDER]: { start: 80, maxBase: 200, repBase: 155, costBase: 68 },
 };
 
-const SIZE_DEF     = { [TYPE.PLANT]: 4, [TYPE.GRAZER]: 5, [TYPE.HUNTER]: 6 };
+const SIZE_DEF     = { [TYPE.PLANT]: 4, [TYPE.GRAZER]: 5, [TYPE.HUNTER]: 6, [TYPE.SPIDER]: 5.5 };
 const MAX_ENTITIES = 750;
-const MAX_POP      = [350, 260, 75];
+const MAX_POP      = [350, 260, 75, 55];
 
 // ── Math ───────────────────────────────────────────────────────────────────────
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -333,6 +469,8 @@ function geneColor(type,g,er) {
     let h=g.hue-tox*185+thr*28; if(h<0) h+=360; if(h>360) h-=360;
     return `hsl(${h.toFixed(0)},${(58+tox*22+thr*12).toFixed(0)}%,${(20+er*24).toFixed(0)}%)`;
   }
+  if(type===TYPE.SPIDER)
+    return `hsl(${g.hue},${(52+(g.webStrength??0.5)*28).toFixed(0)}%,${(22+er*28).toFixed(0)}%)`;
   return `hsl(${g.hue},${(58+g.aggression*30).toFixed(0)}%,${(28+er*30).toFixed(0)}%)`;
 }
 
@@ -388,6 +526,8 @@ function spawnRandom(type) {
 }
 
 let entities=[];
+let webs = [];
+const MAX_WEBS = 120;
 function seed() {
   for(let i=0;i<110;i++) entities.push(spawnRandom(TYPE.PLANT));
   for(let i=0;i< 22;i++) entities.push(spawnRandom(TYPE.GRAZER));
@@ -399,11 +539,11 @@ const CELL=80;
 const _GCOLS=2000; // row stride for integer grid keys (must exceed max WORLD_H/CELL)
 let grid=new Map();
 let nutGrid=new Map();
-let popCount=[0,0,0];
+let popCount=[0,0,0,0];
 
 function buildGrid() {
   grid.clear(); nutGrid.clear();
-  popCount[0]=popCount[1]=popCount[2]=0;
+  popCount[0]=popCount[1]=popCount[2]=popCount[3]=0;
   for(const e of entities) {
     if(e.dead) continue;
     popCount[e.type]++;
@@ -478,7 +618,7 @@ let corpses = []; // {x,y,energy,age}
 
 // ── Gene bank (persists evolved traits through extinction) ────────────────────
 const GENE_BANK_SIZE = 30;
-let geneBank = [[], [], []];
+let geneBank = [[], [], [], []];
 
 function archiveGenes(e) {
   const bank = geneBank[e.type];
@@ -558,7 +698,7 @@ let _atmosLowCO2 = false;
 
 function stepAtmos() {
   const P = popCount[TYPE.PLANT];
-  const A = popCount[TYPE.GRAZER] + popCount[TYPE.HUNTER];
+  const A = popCount[TYPE.GRAZER] + popCount[TYPE.HUNTER] + (popCount[TYPE.SPIDER]||0);
   const net = (P - A * 1.1) * 0.000028; // positive = plants winning → more O2
   atmos.o2  = clamp(atmos.o2  + net + (0.50 - atmos.o2)  * 0.0030, 0.05, 0.95);
   atmos.co2 = clamp(atmos.co2 - net + (0.50 - atmos.co2) * 0.0030, 0.05, 0.95);
@@ -573,6 +713,17 @@ function stepAtmos() {
 let newborns=[];
 
 function stepPlant(e) {
+  let _bpVitality=0, _bpResil=0, _bpFertMult=1, _bpLifeMult=1;
+  e._blessed=false;
+  for(const bl of blessings){
+    if(!blessingMatches(bl,e)) continue;
+    e._blessed=true;
+    if(bl.effect==='vitality')   _bpVitality +=bl.severity*0.015;
+    if(bl.effect==='resilience') _bpResil    +=bl.severity*0.5;
+    if(bl.effect==='longevity')  _bpLifeMult +=bl.severity*0.8;
+    if(bl.effect==='fertility')  _bpFertMult *=(1+bl.severity*0.7);
+  }
+
   let bonus=0;
   // Nutrient lookup via spatial grid (radius 38 < CELL, so 3×3 cell neighborhood suffices)
   const _ncx=Math.floor(e.x/CELL), _ncy=Math.floor(e.y/CELL);
@@ -589,7 +740,8 @@ function stepPlant(e) {
   }
   const co2mult = 0.55 + atmos.co2 * 0.90; // 0.55 at min CO2, 1.0 at 0.5, 1.45 at max
   e.energy=Math.min(e.maxEnergy, e.energy+e.genes.growthRate*(1+bonus)*co2mult);
-  e.energy-=e.genes.size*0.0010+e.genes.spreadChance*2.5; // size & spread upkeep cost
+  if(_bpVitality>0) e.energy=Math.min(e.maxEnergy,e.energy+_bpVitality);
+  e.energy-=(e.genes.size*0.0010+e.genes.spreadChance*2.5)*(1-_bpResil*0.35); // size & spread upkeep cost
   const crowd0=Math.max(0,popCount[TYPE.PLANT]/MAX_POP[TYPE.PLANT]-0.68);
   e.energy-=crowd0*crowd0*2.2; // density disease — quadratic drain above 68% cap
 
@@ -608,10 +760,10 @@ function stepPlant(e) {
   }
 
   if(e.energy<=0){ e.dead=true; return; }
-  if(e.age>4000+e.genes.size*800){ addNutrient(e.x,e.y,e.genes.size*2.5); e.dead=true; return; }
+  if(e.age>(4000+e.genes.size*800)*_bpLifeMult){ addNutrient(e.x,e.y,e.genes.size*2.5); e.dead=true; return; }
   const rt=repThreshold(TYPE.PLANT,e.genes), rc=repCost(TYPE.PLANT,e.genes);
   if(!_disPlantInfertile && entities.length+newborns.length<MAX_ENTITIES
-    && e.energy>rt && Math.random()<e.genes.spreadChance) {
+    && e.energy>rt && Math.random()<e.genes.spreadChance*_bpFertMult) {
     const _child=spawnOffspring(e);
     if(_child){ e.energy-=rc; newborns.push(_child); }
   }
@@ -621,15 +773,30 @@ function stepPlant(e) {
 }
 
 function stepAnimal(e) {
+  // Compute blessing multipliers
+  let _blSpeedMult=1, _blLifeMult=1, _blVitality=0, _blResil=0, _blFertBoost=1;
+  e._blessed=false;
+  for(const bl of blessings){
+    if(!blessingMatches(bl,e)) continue;
+    e._blessed=true;
+    if(bl.effect==='speed')      _blSpeedMult+=bl.severity*0.8;
+    if(bl.effect==='longevity')  _blLifeMult +=bl.severity*0.9;
+    if(bl.effect==='vitality')   _blVitality +=bl.severity*0.022;
+    if(bl.effect==='resilience') _blResil    +=bl.severity*0.40;
+    if(bl.effect==='fertility')  _blFertBoost+=bl.severity*0.7;
+  }
+
   const g=e.genes, t=e.type;
-  const lifespan=g.size*1800, ageFrac=e.age/lifespan;
+  const lifespan=g.size*1800*_blLifeMult, ageFrac=e.age/lifespan;
   if(ageFrac>=1){ addNutrient(e.x,e.y,g.size*2); e.dead=true; return; }
   const speedMult=ageFrac>0.7?Math.max(0.2,1-(ageFrac-0.7)*2.2):1;
   const juvenileBoost=ageFrac<0.15?1.35:1.0;
   let effSpeed=g.speed*speedMult*juvenileBoost;
+  effSpeed*=_blSpeedMult;
   const canReproduce=ageFrac>=0.15&&ageFrac<0.78;
-  const eatType=t===TYPE.GRAZER?TYPE.PLANT:TYPE.GRAZER;
-  const predType=t===TYPE.GRAZER?TYPE.HUNTER:null;
+  // spiders eat any animal; grazers flee both hunters and spiders
+  const eatType = t===TYPE.GRAZER ? TYPE.PLANT : (t===TYPE.SPIDER ? -1 : TYPE.GRAZER);
+  const predType = t===TYPE.GRAZER ? [TYPE.HUNTER, TYPE.SPIDER] : null;
 
   // Nocturnal hunters get a speed boost at night
   const ni=nightIntensity();
@@ -649,7 +816,7 @@ function stepAnimal(e) {
     const fleeR=g.senseRadius*(1.15-g.aggression*0.45);
     const camo=g.camouflage??0;
     const threats=nearby(e.x,e.y,fleeR).filter(n=>
-      !n.dead&&n.type===predType&&dist(e,n)<n.genes.senseRadius*(1-camo*0.62)*(1-(n.genes.stealth??0)*0.60));
+      !n.dead&&predType.includes(n.type)&&dist(e,n)<n.genes.senseRadius*(1-camo*0.62)*(1-(n.genes.stealth??0)*0.60));
     if(threats.length){
       const threat=threats.reduce((b,n)=>dist2(e,n)<dist2(e,b)?n:b);
       const d=dist(e,threat)||1;
@@ -706,7 +873,7 @@ function stepAnimal(e) {
     if(lost){
       e.target=null;
       const cands=nearby(e.x,e.y,g.senseRadius).filter(n=>
-        n!==e&&!n.dead&&n.type===eatType);
+        !n.dead&&(eatType===-1?(n.type===TYPE.GRAZER||n.type===TYPE.HUNTER):n.type===eatType));
       if(cands.length){
         if(t===TYPE.HUNTER){
           // Prefer isolated grazers; pack hunting: converge on already-targeted prey
@@ -767,7 +934,23 @@ function stepAnimal(e) {
         if(md>10){ e.vx=(e.memX-e.x)/md*effSpeed*0.78; e.vy=(e.memY-e.y)/md*effSpeed*0.78; }
         else { e.memX=null; e.memY=null; }
       } else {
-        e.vx+=(Math.random()-0.5)*0.33; e.vy+=(Math.random()-0.5)*0.33;
+        // Spider: move toward web with slowed prey nearby
+        if(t===TYPE.SPIDER){
+          let bestWeb=null, bestD=Infinity;
+          for(const w of webs){
+            if(w.spiderId!==e.id) continue;
+            const wd=Math.hypot(w.x-e.x, w.y-e.y);
+            // Check for prey in this web
+            const hasPrey=nearby(w.x,w.y,w.radius).some(n=>
+              !n.dead&&(n.type===TYPE.GRAZER||n.type===TYPE.HUNTER)&&
+              Math.sqrt((n.vx*n.vx+n.vy*n.vy))<effSpeed*0.4);
+            if(hasPrey && wd<bestD){ bestD=wd; bestWeb=w; }
+          }
+          if(bestWeb){ e.vx=(bestWeb.x-e.x)/bestD*effSpeed; e.vy=(bestWeb.y-e.y)/bestD*effSpeed; }
+          else { e.vx+=(Math.random()-0.5)*0.33; e.vy+=(Math.random()-0.5)*0.33; }
+        } else {
+          e.vx+=(Math.random()-0.5)*0.33; e.vy+=(Math.random()-0.5)*0.33;
+        }
       }
       if(t===TYPE.HUNTER){
         for(const s of scents){
@@ -799,9 +982,23 @@ function stepAnimal(e) {
   if(e.x<0) e.x+=WORLD_W; else if(e.x>=WORLD_W) e.x-=WORLD_W;
   if(e.y<0) e.y+=WORLD_H; else if(e.y>=WORLD_H) e.y-=WORLD_H;
 
+  // Web slowdown
+  if(t!==TYPE.SPIDER){
+    for(const w of webs){
+      const wdx=e.x-w.x, wdy=e.y-w.y;
+      if(wdx*wdx+wdy*wdy<w.radius*w.radius){
+        const drag=1-w.strength*0.82;
+        e.vx*=drag; e.vy*=drag;
+        break;
+      }
+    }
+  }
+
   if(e.poisonedTimer>0) e.poisonedTimer--;
   const metabMult=sleepingThisFrame?0.28:1.0;
   e.energy-=metabolicRate(g)*metabMult;
+  if(_blVitality>0)  e.energy=Math.min(e.maxEnergy,e.energy+_blVitality);
+  if(_blResil>0)     e.energy=Math.min(e.maxEnergy,e.energy+metabolicRate(g)*_blResil);
   if(sleepingThisFrame) e.energy=Math.min(e.maxEnergy,e.energy+0.10); // sleep regen
   e.sleepDrive=Math.max(0,(e.sleepDrive??0)-(sleepingThisFrame?0.0030:0));
   e.energy+=(atmos.o2-0.50)*0.10;
@@ -829,8 +1026,14 @@ function stepAnimal(e) {
   if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2.5); e.dead=true; return; }
 
   const rt=repThreshold(t,g), rc=repCost(t,g);
-  if(canReproduce && !_disInfertile && entities.length+newborns.length<MAX_ENTITIES && e.energy>rt){
+  if(canReproduce && !_disInfertile && entities.length+newborns.length<MAX_ENTITIES && e.energy>rt/_blFertBoost){
     e.energy-=rc; newborns.push(spawnOffspring(e));
+  }
+
+  // Spider web laying
+  if(t===TYPE.SPIDER && webs.length<120 && Math.random()<(g.webFreq??0.01)){
+    webs.push({ x:e.x, y:e.y, strength:(g.webStrength??0.55), maxStr:(g.webStrength??0.55),
+                radius:g.size*5.5, spiderId:e.id, age:0 });
   }
 }
 
@@ -852,6 +1055,12 @@ function step() {
     if(corpses[i].age>=CORPSE_LIFE){ addNutrient(corpses[i].x,corpses[i].y,corpses[i].energy); corpses.splice(i,1); }
   }
   stepSpores();
+  // Web decay
+  for(let i=webs.length-1;i>=0;i--){
+    webs[i].age++;
+    webs[i].strength -= webs[i].strength * (webs[i].maxStr * 0.00018 + 0.0005);
+    if(webs[i].strength<0.04) webs.splice(i,1);
+  }
   for(const e of newborns){
     if(e.generation>maxGeneration) maxGeneration=e.generation;
     if(e.generation>maxGenByType[e.type]) maxGenByType[e.type]=e.generation;
@@ -879,7 +1088,7 @@ function step() {
 const HISTORY_LEN = 400;
 let history = [];  // recorded once per frame
 let maxGeneration = 0;
-let maxGenByType  = [0, 0, 0];
+let maxGenByType  = [0, 0, 0, 0];
 
 // ── Event log ─────────────────────────────────────────────────────────────────
 let tick = 0;
@@ -1143,6 +1352,55 @@ const SPRITES = {
     [2,1,0],[1,1,0],
     [-1,1,0],[-2,1,0],
   ],
+
+  // ── Spiders (top-down, 8 legs, head at +x, rotated to velocity) ─────────────
+  SPIDER_DEFAULT: [                             // classic orb spider, prominent abdomen
+    [-3,0,1],
+    [-2,-1,2],[-2,0,2],[-2,1,2],
+    [-1,-1,2],[-1,0,2],[-1,1,2],
+    [0,0,2],[1,-1,2],[1,0,2],[1,1,2],
+    [2,-1,0],[2,0,1],[2,1,0],
+    [1,-2,1],[2,-2,0],
+    [1,2,1],[2,2,0],
+    [0,-2,1],[-1,-3,0],
+    [0,2,1],[-1,3,0],
+    [-1,-2,1],[-2,-3,0],
+    [-1,2,1],[-2,3,0],
+    [-2,-2,1],[-3,-2,0],
+    [-2,2,1],[-3,2,0],
+  ],
+  SPIDER_ORB: [                                 // large orb-weaver, giant bulbous abdomen
+    [-4,0,1],
+    [-3,-1,2],[-3,0,2],[-3,1,2],
+    [-2,-2,1],[-2,-1,2],[-2,0,2],[-2,1,2],[-2,2,1],
+    [-1,-1,2],[-1,0,2],[-1,1,2],
+    [0,0,2],[1,-1,2],[1,0,2],[1,1,2],
+    [2,-1,0],[2,0,1],[2,1,0],
+    [1,-2,1],[2,-2,0],
+    [1,2,1],[2,2,0],
+    [0,-2,1],[0,-3,0],
+    [0,2,1],[0,3,0],
+    [-1,-2,1],[-2,-3,0],
+    [-1,2,1],[-2,3,0],
+    [-3,-2,1],[-4,-2,0],
+    [-3,2,1],[-4,2,0],
+  ],
+  SPIDER_WOLF: [                                // wolf spider, sleek compact body, long aggressive legs
+    [-2,-1,2],[-2,0,2],[-2,1,2],
+    [-1,-1,2],[-1,0,2],[-1,1,2],
+    [0,-1,2],[0,0,2],[0,1,2],
+    [1,-1,2],[1,0,2],[1,1,2],
+    [2,-1,1],[2,0,2],[2,1,1],
+    [3,-1,0],[3,0,0],[3,1,0],
+    [1,-2,1],[2,-3,0],[3,-2,0],
+    [1,2,1],[2,3,0],[3,2,0],
+    [0,-2,1],[-1,-3,0],
+    [0,2,1],[-1,3,0],
+    [-1,-2,1],[-2,-3,0],
+    [-1,2,1],[-2,3,0],
+    [-2,-2,1],[-3,-3,0],
+    [-2,2,1],[-3,3,0],
+  ],
 };
 
 const ARCHETYPE_NAMES = {
@@ -1152,6 +1410,7 @@ const ARCHETYPE_NAMES = {
   GRAZER_HORSE:'horse', GRAZER_TORTOISE:'tortoise', GRAZER_ELEPHANT:'elephant',
   HUNTER_DEFAULT:'hunter', HUNTER_CAT:'big cat', HUNTER_WOLF:'wolf', HUNTER_BEAR:'bear',
   HUNTER_SNAKE:'snake', HUNTER_EAGLE:'eagle', HUNTER_CROCODILE:'crocodile',
+  SPIDER_DEFAULT:'spider', SPIDER_ORB:'orb weaver', SPIDER_WOLF:'wolf spider',
 };
 
 function getArchetype(type, genes) {
@@ -1173,6 +1432,11 @@ function getArchetype(type, genes) {
     if(g.speed>1.9&&(g.fertility??1)>1.4)                    return 'GRAZER_RABBIT';
     if((g.poisonResistance??0)>0.50)                          return 'GRAZER_TORTOISE';
     return 'GRAZER_DEFAULT';
+  }
+  if(type===TYPE.SPIDER){
+    if(g.size>8.0||(g.webStrength??0)>0.70)   return 'SPIDER_ORB';
+    if(g.speed>1.5&&(g.webFreq??0)<0.005)      return 'SPIDER_WOLF';
+    return 'SPIDER_DEFAULT';
   }
   // TYPE.HUNTER
   if(g.size>9.5)                                             return 'HUNTER_BEAR';
@@ -1310,6 +1574,27 @@ function draw() {
   }
   ctx.globalAlpha=1;
 
+  // Webs
+  ctx.setLineDash([]);
+  for(const w of webs){
+    if(w.x<_vx1||w.x>_vx2||w.y<_vy1||w.y>_vy2) continue;
+    ctx.globalAlpha=w.strength*0.30;
+    ctx.strokeStyle='#c8c880';
+    ctx.lineWidth=0.6;
+    const r=w.radius;
+    // Radial strands
+    for(let a=0;a<Math.PI*2;a+=Math.PI/4){
+      ctx.beginPath(); ctx.moveTo(w.x,w.y);
+      ctx.lineTo(w.x+Math.cos(a)*r, w.y+Math.sin(a)*r);
+      ctx.stroke();
+    }
+    // Concentric rings at 1/3, 2/3, 1x radius
+    for(let ri=1;ri<=3;ri++){
+      ctx.beginPath(); ctx.arc(w.x,w.y,r*ri/3,0,Math.PI*2); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha=1;
+
   // Corpses — viewport culled
   for(const c of corpses){
     if(c.x<_vx1||c.x>_vx2||c.y<_vy1||c.y>_vy2) continue;
@@ -1391,6 +1676,13 @@ function draw() {
       ctx.globalAlpha=0.32;
       ctx.beginPath(); ctx.arc(e.x,e.y,g.size*2.1,0,Math.PI*2);
       ctx.fillStyle='#40ff80'; ctx.fill();
+    }
+
+    // Blessing glow
+    if(e._blessed){
+      ctx.globalAlpha=0.25;
+      ctx.beginPath(); ctx.arc(e.x,e.y,g.size*2.3,0,Math.PI*2);
+      ctx.fillStyle='#ffd060'; ctx.fill();
     }
 
     // Hunter kick-back flash (orange)
@@ -1650,7 +1942,7 @@ function drawInspect(e) {
   // Header — archetype label (rabbit / deer / big cat / etc.) replaces generic type name
   const _arch=getArchetype(e.type,e.genes);
   ctx.fillStyle=color;
-  ctx.fillText(immature?'PLANT  ◆ seedling':(ARCHETYPE_NAMES[_arch]||['PLANT','GRAZER','HUNTER'][e.type]).toUpperCase(), px+7, iy); iy+=13;
+  ctx.fillText(immature?'PLANT  ◆ seedling':(ARCHETYPE_NAMES[_arch]||['PLANT','GRAZER','HUNTER','SPIDER'][e.type]).toUpperCase(), px+7, iy); iy+=13;
   ctx.fillStyle='#444';
   ctx.fillText(`gen ${e.generation}  ·  age ${e.age}`, px+7, iy); iy+=11;
   ctx.fillStyle='#181828';
@@ -1763,6 +2055,7 @@ function updateStats() {
   document.getElementById('st-plants').textContent  = `plants: ${popCount[0]}`;
   document.getElementById('st-grazers').textContent = `grazers: ${popCount[1]}`;
   document.getElementById('st-hunters').textContent = `hunters: ${popCount[2]}`;
+  document.getElementById('st-spiders').textContent = `spiders: ${popCount[3]||0}`;
   document.getElementById('st-gen').textContent     = `gen: ${maxGeneration}`;
 }
 
@@ -1782,7 +2075,7 @@ function loop() {
 
 // ── Controls ───────────────────────────────────────────────────────────────────
 let selected=null, selStruct=null;
-const TYPE_BTNS={ selPlant:TYPE.PLANT, selGrazer:TYPE.GRAZER, selHunter:TYPE.HUNTER };
+const TYPE_BTNS={ selPlant:TYPE.PLANT, selGrazer:TYPE.GRAZER, selHunter:TYPE.HUNTER, selSpider:TYPE.SPIDER };
 const btnEls={};
 const structBtns={ selNest:STRUCT.NEST, selRoost:STRUCT.ROOST };
 
@@ -1819,6 +2112,7 @@ const DISEASE_GENES = {
   '0':  ['growthRate','size','spreadChance','sporeChance','toxicity','thorns'],
   '1':  ['speed','size','senseRadius','metabolism','fertility','aggression','poisonResistance','stamina','camouflage'],
   '2':  ['speed','size','senseRadius','metabolism','fertility','aggression','stealth','nocturnal'],
+  '3': ['speed','size','senseRadius','metabolism','fertility','aggression','webFreq','webStrength','webDecay'],
 };
 const GENE_DISPLAY = {
   speed:'Speed', size:'Size', senseRadius:'Sense Radius', metabolism:'Metabolism',
@@ -1826,6 +2120,7 @@ const GENE_DISPLAY = {
   stamina:'Stamina', camouflage:'Camouflage', growthRate:'Growth Rate',
   spreadChance:'Spread Chance', sporeChance:'Spore Chance', toxicity:'Toxicity',
   thorns:'Thorns', stealth:'Stealth', nocturnal:'Nocturnal',
+  webFreq:'Web Frequency', webStrength:'Web Strength', webDecay:'Web Decay',
 };
 // [min, max, step, decimals]
 const GENE_RANGES = {
@@ -1835,11 +2130,12 @@ const GENE_RANGES = {
   fertility:[0.4,2.4,0.03,2], aggression:[0.0,1.0,0.02,2], poisonResistance:[0.0,1.0,0.02,2],
   stamina:[0.3,2.8,0.03,2], camouflage:[0.0,0.90,0.02,2], stealth:[0.0,0.85,0.02,2],
   nocturnal:[0.0,1.0,0.02,2],
+  webFreq:[0.001,0.045,0.001,3], webStrength:[0.10,1.0,0.02,2], webDecay:[0.0005,0.012,0.0005,4],
 };
 const EFFECT_LABELS = {
   drain:'Energy Drain', lethal:'Lethal', infertile:'Infertility', slow:'Slow',
 };
-const TARGET_LABELS = { '-1':'All Animals', '0':'Plants', '1':'Grazers', '2':'Hunters' };
+const TARGET_LABELS = { '-1':'All Animals', '0':'Plants', '1':'Grazers', '2':'Hunters', '3':'Spiders' };
 
 const dpPanel    = document.getElementById('diseasePanel');
 const dpTarget   = document.getElementById('dpTarget');
@@ -1928,6 +2224,73 @@ document.getElementById('btnDisease').addEventListener('click', ()=>{
 
 dpUpdateGeneList(); // initialise gene dropdown
 
+// ── Blessing system ──────────────────────────────────────────────────────────
+let blessings = [];
+let _blessingIdCtr = 0;
+
+const BLESS_TARGET_LABELS = {
+  'all':'All Animals', 'type:0':'All Plants', 'type:1':'All Grazers',
+  'type:2':'All Hunters', 'type:3':'All Spiders',
+};
+const BLESS_EFFECT_LABELS = {
+  speed:'Speed Boost', longevity:'Longevity', vitality:'Vitality',
+  resilience:'Resilience', fertility:'Fertility',
+};
+
+const bpPanel    = document.getElementById('blessPanel');
+const bpSeverity = document.getElementById('bpSeverity');
+const bpSevV     = document.getElementById('bpSevVal');
+const bpList     = document.getElementById('bpList');
+
+bpSeverity.addEventListener('input', ()=>{ bpSevV.textContent=bpSeverity.value+'%'; });
+
+function bpRenderList() {
+  if(!blessings.length){ bpList.innerHTML='<span class="no-bl">none</span>'; return; }
+  bpList.innerHTML=blessings.map(b=>{
+    const tLbl=BLESS_TARGET_LABELS[b.target]||(b.target.startsWith('arch:')?ARCHETYPE_NAMES[b.target.slice(5)]||b.target.slice(5):b.target);
+    return `<div class="bl-item">
+      <span class="bl-name">${tLbl}<br>→ ${BLESS_EFFECT_LABELS[b.effect]} ${Math.round(b.severity*100)}%</span>
+      <span class="bl-del" data-id="${b.id}">✕</span>
+    </div>`;
+  }).join('');
+  bpList.querySelectorAll('.bl-del').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=parseInt(btn.dataset.id);
+      blessings=blessings.filter(b=>b.id!==id);
+      bpRenderList();
+    });
+  });
+}
+
+document.getElementById('bpBestow').addEventListener('click',()=>{
+  blessings.push({
+    id:++_blessingIdCtr,
+    target:document.getElementById('bpTarget').value,
+    effect:document.getElementById('bpEffect').value,
+    severity:parseInt(bpSeverity.value)/100,
+  });
+  bpRenderList();
+});
+document.getElementById('bpClose').addEventListener('click',()=>{
+  bpPanel.classList.remove('open');
+  document.getElementById('btnBless').classList.remove('active');
+});
+document.getElementById('btnBless').addEventListener('click',()=>{
+  const open=bpPanel.classList.toggle('open');
+  document.getElementById('btnBless').classList.toggle('active',open);
+  if(open) bpRenderList();
+});
+
+function blessingMatches(bl, e) {
+  if(bl.target==='all')                      return e.type!==TYPE.PLANT;
+  if(bl.target==='type:0')                   return e.type===TYPE.PLANT;
+  if(bl.target==='type:1')                   return e.type===TYPE.GRAZER;
+  if(bl.target==='type:2')                   return e.type===TYPE.HUNTER;
+  if(bl.target==='type:3')                   return e.type===TYPE.SPIDER;
+  if(bl.target.startsWith('arch:'))          return getArchetype(e.type,e.genes)===bl.target.slice(5);
+  return false;
+}
+
 // Speed buttons
 const speedBtns=[
   [document.getElementById('speed1'), 1],
@@ -2012,8 +2375,8 @@ document.getElementById('btnPause').addEventListener('click',()=>{
 });
 
 document.getElementById('btnClear').addEventListener('click',()=>{
-  entities=[]; nutrients=[]; spores=[]; corpses=[]; structures=[]; history=[]; inspected=null;
-  maxGeneration=0; maxGenByType=[0,0,0]; geneBank=[[],[],[]];
+  entities=[]; nutrients=[]; spores=[]; corpses=[]; structures=[]; history=[]; inspected=null; webs=[];
+  maxGeneration=0; maxGenByType=[0,0,0,0]; geneBank=[[],[],[],[]];
   eventLog.length=0; Object.keys(milestoneHit).forEach(k=>delete milestoneHit[k]); lastLoggedGen=0; tick=0;
   genFertZones();
   document.getElementById('st-gen').textContent='gen: 0';
