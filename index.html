@@ -804,31 +804,124 @@ function recordHistory() {
 }
 
 // ── Sprites ───────────────────────────────────────────────────────────────────
-// Each entry: [dx, dy, shade]  shade: 2=bright highlight  1=mid body  0=dark shadow
-const SPRITE = {
-  [TYPE.PLANT]: [
-    // Diamond/cross — looks like a stylised plant or flower
-    [0,-2, 2],
+// Each entry: [dx, dy, shade]  shade: 2=highlight  1=mid  0=shadow
+// Hunters face RIGHT (+x) and are ctx.rotate()'d to match velocity.
+const SPRITES = {
+  // ── Plants ──────────────────────────────────────────────────────────────────
+  PLANT_DEFAULT: [                              // flower / bush
+    [0,-2,2],
     [-1,-1,1],[0,-1,2],[1,-1,1],
-    [-2, 0,1],[-1, 0,2],[0, 0,2],[1, 0,2],[2, 0,1],
-    [-1, 1,1],[0, 1,2],[1, 1,1],
-    [0, 2, 2],
+    [-2,0,1],[-1,0,2],[0,0,2],[1,0,2],[2,0,1],
+    [-1,1,1],[0,1,2],[1,1,1],
+    [0,2,2],
   ],
-  [TYPE.GRAZER]: [
-    // Wide, squat herbivore with ear nubs and stubby legs
-    [-2,-2,2],[2,-2,2],                                     // ears
-    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],        // top body
-    [-2, 0,1],[-1, 0,2],[0, 0,2],[1, 0,2],[2, 0,1],        // mid body
-    [-2, 1,1],[-1, 1,2],[0, 1,2],[1, 1,2],[2, 1,1],        // bottom body
-    [-1, 2,1],[1, 2,1],                                     // legs
+  PLANT_TREE: [                                 // wide canopy + thin trunk
+    [0,-3,2],
+    [-1,-2,2],[0,-2,2],[1,-2,2],
+    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],
+    [-1,0,2],[0,0,1],[1,0,1],
+    [0,1,1],[0,2,0],
   ],
-  [TYPE.HUNTER]: [
-    // Asymmetric arrow — right side is the tip; canvas rotates to face velocity
+  PLANT_CACTUS: [                               // vertical trunk + outstretched arms
+    [0,-3,2],
+    [0,-2,2],
+    [-2,-1,2],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,2],
+    [0,0,2],
+    [0,1,2],
+    [0,2,1],
+  ],
+  PLANT_MUSHROOM: [                             // wide cap on narrow stem
+    [-2,-2,1],[-1,-2,2],[0,-2,2],[1,-2,2],[2,-2,1],
+    [-1,-1,2],[0,-1,2],[1,-1,2],
+    [0,0,1],
+    [0,1,0],
+  ],
+
+  // ── Grazers (no rotation) ───────────────────────────────────────────────────
+  GRAZER_DEFAULT: [                             // wide squat herbivore
+    [-2,-2,2],[2,-2,2],
+    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],
+    [-2,0,1],[-1,0,2],[0,0,2],[1,0,2],[2,0,1],
+    [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
+    [-1,2,1],[1,2,1],
+  ],
+  GRAZER_RABBIT: [                              // tall ears, compact round body, tail nub
+    [-1,-3,2],[1,-3,2],
+    [-1,-2,2],[1,-2,2],
+    [-1,-1,2],[0,-1,2],[1,-1,1],
+    [-2,0,1],[-1,0,2],[0,0,2],[1,0,2],[2,0,1],
+    [-1,1,2],[0,1,2],[1,1,2],
+    [-2,2,1],[2,2,1],
+    [2,0,2],
+  ],
+  GRAZER_DEER: [                                // wide branching antlers, slender torso, long legs
+    [-3,-2,1],[-2,-2,2],
+    [2,-2,2],[3,-2,1],
+    [0,-1,2],[1,-1,1],
+    [-1,0,2],[0,0,2],[1,0,2],
+    [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
+    [-2,2,1],[-1,2,1],[1,2,1],[2,2,1],
+  ],
+  GRAZER_BISON: [                               // small head, massive wide body, hump
+    [1,-2,2],[2,-2,1],
+    [-2,-1,2],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],
+    [-3,0,1],[-2,0,2],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],[3,0,1],
+    [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
+    [-2,2,1],[2,2,1],
+  ],
+
+  // ── Hunters (face +x, rotated to velocity) ──────────────────────────────────
+  HUNTER_DEFAULT: [                             // compact arrow
     [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,1],
-    [-2, 0,1],[-1, 0,2],[0, 0,2],[1, 0,2],[2, 0,2],        // centre row extends to tip
-    [-2, 1,1],[-1, 1,2],[0, 1,2],[1, 1,1],
+    [-2,0,1],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],
+    [-2,1,1],[-1,1,2],[0,1,2],[1,1,1],
+  ],
+  HUNTER_CAT: [                                 // very elongated, streamlined, tail tip
+    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],
+    [-3,0,0],[-2,0,2],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],[3,0,2],
+    [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
+  ],
+  HUNTER_WOLF: [                                // pointed ears, extended snout, tail
+    [-1,-2,1],[1,-2,1],
+    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],
+    [-3,0,0],[-2,0,2],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],[3,0,1],
+    [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
+  ],
+  HUNTER_BEAR: [                                // round ears, massive wide body, stubby legs
+    [-2,-2,2],[2,-2,2],
+    [-3,-1,1],[-2,-1,2],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,2],[3,-1,1],
+    [-3,0,1],[-2,0,2],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],[3,0,1],
+    [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
+    [-1,2,1],[0,2,1],[1,2,1],
   ],
 };
+
+const ARCHETYPE_NAMES = {
+  PLANT_DEFAULT:'plant', PLANT_TREE:'tree', PLANT_CACTUS:'cactus', PLANT_MUSHROOM:'mushroom',
+  GRAZER_DEFAULT:'grazer', GRAZER_RABBIT:'rabbit', GRAZER_DEER:'deer', GRAZER_BISON:'bison',
+  HUNTER_DEFAULT:'hunter', HUNTER_CAT:'big cat', HUNTER_WOLF:'wolf', HUNTER_BEAR:'bear',
+};
+
+function getArchetype(type, genes) {
+  const g=genes;
+  if(type===TYPE.PLANT){
+    if(g.size>7.0&&(g.thorns??0)<0.30&&(g.toxicity??0)<0.30) return 'PLANT_TREE';
+    if((g.thorns??0)>0.45)   return 'PLANT_CACTUS';
+    if((g.toxicity??0)>0.45) return 'PLANT_MUSHROOM';
+    return 'PLANT_DEFAULT';
+  }
+  if(type===TYPE.GRAZER){
+    if(g.size>8.0&&(g.stamina??1)>1.7)              return 'GRAZER_BISON';
+    if(g.senseRadius>105||(g.camouflage??0)>0.45)   return 'GRAZER_DEER';
+    if(g.speed>1.9&&(g.fertility??1)>1.4)           return 'GRAZER_RABBIT';
+    return 'GRAZER_DEFAULT';
+  }
+  // TYPE.HUNTER
+  if(g.size>9.5)              return 'HUNTER_BEAR';
+  if(g.speed>2.4)             return 'HUNTER_CAT';
+  if((g.aggression??0)>0.80)  return 'HUNTER_WOLF';
+  return 'HUNTER_DEFAULT';
+}
 
 // ── Structures render ──────────────────────────────────────────────────────────
 function drawStructures() {
@@ -995,7 +1088,7 @@ function draw() {
       const spd=Math.sqrt(e.vx*e.vx+e.vy*e.vy);
       if(spd>0.05) ctx.rotate(Math.atan2(e.vy,e.vx));
     }
-    const spr=SPRITE[t];
+    const spr=SPRITES[getArchetype(t,g)];
     for(const [dx,dy,shade] of spr){
       let h,s,lBase;
       if(t===TYPE.PLANT){
@@ -1286,9 +1379,10 @@ function drawInspect(e) {
   let iy=py+14;
   ctx.font='10px monospace';
 
-  // Header
+  // Header — archetype label (rabbit / deer / big cat / etc.) replaces generic type name
+  const _arch=getArchetype(e.type,e.genes);
   ctx.fillStyle=color;
-  ctx.fillText(immature?'PLANT  ◆ seedling':['PLANT','GRAZER','HUNTER'][e.type], px+7, iy); iy+=13;
+  ctx.fillText(immature?'PLANT  ◆ seedling':(ARCHETYPE_NAMES[_arch]||['PLANT','GRAZER','HUNTER'][e.type]).toUpperCase(), px+7, iy); iy+=13;
   ctx.fillStyle='#444';
   ctx.fillText(`gen ${e.generation}  ·  age ${e.age}`, px+7, iy); iy+=11;
   ctx.fillStyle='#181828';
