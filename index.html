@@ -1149,7 +1149,7 @@ function heatColor(val, lo, hi) {
 }
 
 function recordHistory() {
-  history.push({ p: popCount[0], g: popCount[1], h: popCount[2] });
+  history.push({ p: popCount[0], g: popCount[1], h: popCount[2], s: popCount[3] });
   if (history.length > HISTORY_LEN) history.shift();
 }
 
@@ -1885,14 +1885,16 @@ function drawGraph() {
   drawLine('#3a7a3a', e=>e.p, MAX_POP[0], '#3a7a3a');
   drawLine('#4af',    e=>e.g, MAX_POP[1], '#4af');
   drawLine('#f52',    e=>e.h, MAX_POP[2], '#f52');
+  drawLine('#c8a060', e=>e.s||0, MAX_POP[3], '#c8a060');
 
   // Current counts
   const last = history[history.length-1];
   ctx.font='9px monospace';
   const items = [
-    ['#3a7a3a', `P ${last.p}`, 0],
-    ['#4af',    `G ${last.g}`, 44],
-    ['#f52',    `H ${last.h}`, 82],
+    ['#3a7a3a', `P ${last.p}`,   0],
+    ['#4af',    `G ${last.g}`,  44],
+    ['#f52',    `H ${last.h}`,  82],
+    ['#c8a060', `S ${last.s||0}`, 118],
   ];
   items.forEach(([col, text, ox]) => {
     ctx.fillStyle=col; ctx.globalAlpha=0.9;
