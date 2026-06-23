@@ -66,6 +66,62 @@
   .btn-nest.active  { background: rgba(200,144,58,0.18); border-color: #c8903a; }
   .btn-roost { color: #9070d0; border-color: #301870; }
   .btn-roost.active { background: rgba(144,112,208,0.18); border-color: #9070d0; }
+  .btn-disease { color: #6da; border-color: #1a3a1a; }
+  .btn-disease.active { background: rgba(80,220,120,0.15); border-color: #6da; }
+
+  /* ── Disease Panel ────────────────────────────────────────── */
+  #diseasePanel {
+    position: fixed; top: 90px; right: 10px; width: 210px;
+    background: #080f08; border: 1px solid #1e3a1e; border-radius: 4px;
+    padding: 9px 10px; font-family: monospace; font-size: 0.73rem;
+    color: #7bc; z-index: 200; display: none; pointer-events: auto;
+  }
+  #diseasePanel.open { display: block; }
+  #diseasePanel .dp-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 7px; padding-bottom: 5px; border-bottom: 1px solid #1a3a1a;
+  }
+  #diseasePanel .dp-title { color: #9de; letter-spacing: 2px; font-size: 0.76rem; }
+  #diseasePanel .dp-close { cursor: pointer; color: #445; font-size: 0.82rem; line-height:1; }
+  #diseasePanel .dp-close:hover { color: #999; }
+  #diseasePanel label { display: block; color: #4a7; font-size: 0.68rem; margin: 5px 0 2px; }
+  #diseasePanel select {
+    width: 100%; background: #05090a; color: #9de; border: 1px solid #1e3a1e;
+    border-radius: 2px; padding: 2px 4px; font-family: monospace; font-size: 0.72rem;
+  }
+  #diseasePanel .cond-row { display: flex; gap: 5px; align-items: center; margin: 4px 0; }
+  #diseasePanel .cond-btn {
+    padding: 2px 9px; border: 1px solid #1e3a1e; border-radius: 2px;
+    cursor: pointer; color: #4a7; font-size: 0.75rem; background: transparent;
+  }
+  #diseasePanel .cond-btn.active { background: #0d1e0d; color: #9de; border-color: #3a7a3a; }
+  #diseasePanel .slider-row { display: flex; align-items: center; gap: 5px; }
+  #diseasePanel input[type=range] {
+    flex: 1; accent-color: #5da; height: 14px;
+  }
+  #diseasePanel .val-lbl { color: #9de; min-width: 36px; text-align: right; font-size: 0.70rem; }
+  #diseasePanel .release-btn {
+    width: 100%; margin-top: 8px; padding: 5px 0;
+    background: #0a180a; border: 1px solid #2e6a2e; color: #9de;
+    border-radius: 3px; cursor: pointer; font-family: monospace;
+    font-size: 0.74rem; letter-spacing: 1px;
+  }
+  #diseasePanel .release-btn:hover { background: #122012; }
+  #diseasePanel .dp-sep {
+    margin: 8px 0 5px; font-size: 0.66rem; color: #2a5a2a;
+    letter-spacing: 2px; border-top: 1px solid #111e11; padding-top: 6px;
+  }
+  #diseasePanel .dis-item {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 3px 0; border-bottom: 1px solid #0a150a; gap: 4px;
+  }
+  #diseasePanel .dis-name { flex: 1; color: #6a9; font-size: 0.67rem; line-height: 1.35; }
+  #diseasePanel .dis-del {
+    cursor: pointer; color: #523; font-size: 0.78rem;
+    padding: 0 3px; flex-shrink: 0;
+  }
+  #diseasePanel .dis-del:hover { color: #f55; }
+  #diseasePanel .no-dis { color: #2a5a2a; font-size: 0.68rem; font-style: italic; }
 </style>
 </head>
 <body>
@@ -91,8 +147,60 @@
   <button class="btn-heat"  id="btnHeat">◉ Heat</button>
   <button class="btn-goal"  id="btnGoal">⚑ Goal</button>
   <div class="sep"></div>
-  <button class="btn-nest"  id="selNest">⌂ Nest</button>
-  <button class="btn-roost" id="selRoost">⌂ Roost</button>
+  <button class="btn-nest"    id="selNest">⌂ Nest</button>
+  <button class="btn-roost"   id="selRoost">⌂ Roost</button>
+  <div class="sep"></div>
+  <button class="btn-disease" id="btnDisease">☣ Disease</button>
+</div>
+
+<!-- Disease panel overlay -->
+<div id="diseasePanel">
+  <div class="dp-header">
+    <span class="dp-title">☣ DISEASE LAB</span>
+    <span class="dp-close" id="dpClose">✕</span>
+  </div>
+
+  <label>Target</label>
+  <select id="dpTarget">
+    <option value="-1">All Animals</option>
+    <option value="0">Plants</option>
+    <option value="1">Grazers</option>
+    <option value="2">Hunters</option>
+  </select>
+
+  <label>Gene</label>
+  <select id="dpGene"></select>
+
+  <label>Condition</label>
+  <div class="cond-row">
+    <button class="cond-btn active" id="dpCondGt">&gt; above</button>
+    <button class="cond-btn"        id="dpCondLt">&lt; below</button>
+  </div>
+
+  <label>Threshold  <span id="dpThreshLbl" style="color:#9de"></span></label>
+  <div class="slider-row">
+    <input type="range" id="dpThresh" min="0" max="1" step="0.01" value="0.5">
+    <span class="val-lbl" id="dpThreshVal">—</span>
+  </div>
+
+  <label>Effect</label>
+  <select id="dpEffect">
+    <option value="drain">Energy Drain</option>
+    <option value="lethal">Lethal</option>
+    <option value="infertile">Infertility</option>
+    <option value="slow">Slow (movement cost)</option>
+  </select>
+
+  <label>Severity  <span id="dpSevLbl" style="color:#9de"></span></label>
+  <div class="slider-row">
+    <input type="range" id="dpSeverity" min="1" max="100" value="50">
+    <span class="val-lbl" id="dpSevVal">50%</span>
+  </div>
+
+  <button class="release-btn" id="dpRelease">☣ Release Disease</button>
+
+  <div class="dp-sep">ACTIVE DISEASES</div>
+  <div id="dpList"><span class="no-dis">none</span></div>
 </div>
 
 <div id="stats">
@@ -484,15 +592,30 @@ function stepPlant(e) {
   e.energy-=e.genes.size*0.0010+e.genes.spreadChance*2.5; // size & spread upkeep cost
   const crowd0=Math.max(0,popCount[TYPE.PLANT]/MAX_POP[TYPE.PLANT]-0.68);
   e.energy-=crowd0*crowd0*2.2; // density disease — quadratic drain above 68% cap
+
+  // Plant diseases
+  let _disPlantInfertile=false;
+  e._diseased=false;
+  for(const dis of diseases){
+    if(dis.targetType!==0) continue; // plants only
+    const val=e.genes[dis.gene];
+    if(val===undefined) continue;
+    if(dis.cond==='>'?val<=dis.threshold:val>=dis.threshold) continue;
+    e._diseased=true;
+    if(dis.effect==='drain')    e.energy-=0.010*dis.severity;
+    else if(dis.effect==='lethal') e.energy-=0.06*dis.severity;
+    else if(dis.effect==='infertile') _disPlantInfertile=true;
+  }
+
   if(e.energy<=0){ e.dead=true; return; }
   if(e.age>4000+e.genes.size*800){ addNutrient(e.x,e.y,e.genes.size*2.5); e.dead=true; return; }
   const rt=repThreshold(TYPE.PLANT,e.genes), rc=repCost(TYPE.PLANT,e.genes);
-  if(entities.length+newborns.length<MAX_ENTITIES
+  if(!_disPlantInfertile && entities.length+newborns.length<MAX_ENTITIES
     && e.energy>rt && Math.random()<e.genes.spreadChance) {
     const _child=spawnOffspring(e);
     if(_child){ e.energy-=rc; newborns.push(_child); }
   }
-  if(spores.length<MAX_SPORES && e.energy>rt*0.55 && Math.random()<e.genes.sporeChance){
+  if(!_disPlantInfertile && spores.length<MAX_SPORES && e.energy>rt*0.55 && Math.random()<e.genes.sporeChance){
     releaseSpore(e); e.energy-=rc*0.28;
   }
 }
@@ -685,10 +808,28 @@ function stepAnimal(e) {
   if(atmos.o2<0.30) e.energy-=(0.30-atmos.o2)*0.55;
   const crowd=Math.max(0,popCount[t]/MAX_POP[t]-0.68);
   e.energy-=crowd*crowd*1.8;
+
+  // Disease effects
+  let _disInfertile=false;
+  e._diseased=false;
+  for(const dis of diseases){
+    if(dis.targetType!==t && dis.targetType!==-1) continue;
+    const val=g[dis.gene];
+    if(val===undefined) continue;
+    if(dis.cond==='>'?val<=dis.threshold:val>=dis.threshold) continue;
+    e._diseased=true;
+    if(dis.effect==='drain')    e.energy-=0.016*dis.severity;
+    else if(dis.effect==='lethal') e.energy-=0.09*dis.severity;
+    else if(dis.effect==='slow'){
+      const mv=Math.sqrt(e.vx*e.vx+e.vy*e.vy);
+      e.energy-=mv*0.018*dis.severity;
+    } else if(dis.effect==='infertile') _disInfertile=true;
+  }
+
   if(e.energy<=0){ addNutrient(e.x,e.y,g.size*2.5); e.dead=true; return; }
 
   const rt=repThreshold(t,g), rc=repCost(t,g);
-  if(canReproduce && entities.length+newborns.length<MAX_ENTITIES && e.energy>rt){
+  if(canReproduce && !_disInfertile && entities.length+newborns.length<MAX_ENTITIES && e.energy>rt){
     e.energy-=rc; newborns.push(spawnOffspring(e));
   }
 }
@@ -1245,6 +1386,13 @@ function draw() {
       ctx.fillStyle='#b040ff'; ctx.fill();
     }
 
+    // Disease glow
+    if(e._diseased){
+      ctx.globalAlpha=0.32;
+      ctx.beginPath(); ctx.arc(e.x,e.y,g.size*2.1,0,Math.PI*2);
+      ctx.fillStyle='#40ff80'; ctx.fill();
+    }
+
     // Hunter kick-back flash (orange)
     if((e.hitTimer??0)>0){
       ctx.globalAlpha=(e.hitTimer/25)*0.52;
@@ -1661,6 +1809,124 @@ Object.entries(structBtns).forEach(([id,stype])=>{
     if(!was){ selStruct=stype; document.getElementById(id).classList.add('active'); }
   });
 });
+
+// ── Disease system ────────────────────────────────────────────────────────────
+let diseases = [];
+let _diseaseIdCtr = 0;
+
+const DISEASE_GENES = {
+  '-1': ['speed','size','senseRadius','metabolism','fertility','aggression'],
+  '0':  ['growthRate','size','spreadChance','sporeChance','toxicity','thorns'],
+  '1':  ['speed','size','senseRadius','metabolism','fertility','aggression','poisonResistance','stamina','camouflage'],
+  '2':  ['speed','size','senseRadius','metabolism','fertility','aggression','stealth','nocturnal'],
+};
+const GENE_DISPLAY = {
+  speed:'Speed', size:'Size', senseRadius:'Sense Radius', metabolism:'Metabolism',
+  fertility:'Fertility', aggression:'Aggression', poisonResistance:'Poison Resist',
+  stamina:'Stamina', camouflage:'Camouflage', growthRate:'Growth Rate',
+  spreadChance:'Spread Chance', sporeChance:'Spore Chance', toxicity:'Toxicity',
+  thorns:'Thorns', stealth:'Stealth', nocturnal:'Nocturnal',
+};
+// [min, max, step, decimals]
+const GENE_RANGES = {
+  growthRate:[0.02,0.30,0.005,3], size:[2.0,13.0,0.1,1], spreadChance:[0.0004,0.010,0.0002,4],
+  sporeChance:[0.0001,0.0070,0.0001,4], toxicity:[0.0,1.0,0.02,2], thorns:[0.0,1.0,0.02,2],
+  speed:[0.3,3.6,0.05,2], senseRadius:[18,180,2,0], metabolism:[0.3,2.4,0.03,2],
+  fertility:[0.4,2.4,0.03,2], aggression:[0.0,1.0,0.02,2], poisonResistance:[0.0,1.0,0.02,2],
+  stamina:[0.3,2.8,0.03,2], camouflage:[0.0,0.90,0.02,2], stealth:[0.0,0.85,0.02,2],
+  nocturnal:[0.0,1.0,0.02,2],
+};
+const EFFECT_LABELS = {
+  drain:'Energy Drain', lethal:'Lethal', infertile:'Infertility', slow:'Slow',
+};
+const TARGET_LABELS = { '-1':'All Animals', '0':'Plants', '1':'Grazers', '2':'Hunters' };
+
+const dpPanel    = document.getElementById('diseasePanel');
+const dpTarget   = document.getElementById('dpTarget');
+const dpGene     = document.getElementById('dpGene');
+const dpCondGt   = document.getElementById('dpCondGt');
+const dpCondLt   = document.getElementById('dpCondLt');
+const dpThresh   = document.getElementById('dpThresh');
+const dpThreshV  = document.getElementById('dpThreshVal');
+const dpEffect   = document.getElementById('dpEffect');
+const dpSeverity = document.getElementById('dpSeverity');
+const dpSevV     = document.getElementById('dpSevVal');
+const dpList     = document.getElementById('dpList');
+let _dpCond = '>';
+
+function dpUpdateGeneList() {
+  const genes = DISEASE_GENES[dpTarget.value] || DISEASE_GENES['-1'];
+  dpGene.innerHTML = genes.map(k=>`<option value="${k}">${GENE_DISPLAY[k]||k}</option>`).join('');
+  dpUpdateThreshRange();
+}
+function dpUpdateThreshRange() {
+  const r = GENE_RANGES[dpGene.value];
+  if (!r) return;
+  dpThresh.min = r[0]; dpThresh.max = r[1]; dpThresh.step = r[2];
+  const mid = ((r[0]+r[1])/2);
+  dpThresh.value = mid;
+  dpThreshV.textContent = mid.toFixed(r[3]);
+}
+function dpRenderList() {
+  if (!diseases.length) { dpList.innerHTML = '<span class="no-dis">none</span>'; return; }
+  dpList.innerHTML = diseases.map(d=>{
+    const r = GENE_RANGES[d.gene];
+    const tv = r ? Number(d.threshold).toFixed(r[3]) : d.threshold;
+    return `<div class="dis-item">
+      <span class="dis-name">${TARGET_LABELS[d.targetType]}<br>
+        ${GENE_DISPLAY[d.gene]||d.gene} ${d.cond} ${tv}<br>
+        → ${EFFECT_LABELS[d.effect]} ${Math.round(d.severity*100)}%</span>
+      <span class="dis-del" data-id="${d.id}">✕</span>
+    </div>`;
+  }).join('');
+  dpList.querySelectorAll('.dis-del').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = parseInt(btn.dataset.id);
+      diseases = diseases.filter(d=>d.id!==id);
+      dpRenderList();
+    });
+  });
+}
+
+dpTarget.addEventListener('change', dpUpdateGeneList);
+dpGene.addEventListener('change', dpUpdateThreshRange);
+dpThresh.addEventListener('input', ()=>{
+  const r = GENE_RANGES[dpGene.value];
+  dpThreshV.textContent = Number(dpThresh.value).toFixed(r?r[3]:2);
+});
+dpSeverity.addEventListener('input', ()=>{
+  dpSevV.textContent = dpSeverity.value + '%';
+});
+dpCondGt.addEventListener('click', ()=>{
+  _dpCond='>'; dpCondGt.classList.add('active'); dpCondLt.classList.remove('active');
+});
+dpCondLt.addEventListener('click', ()=>{
+  _dpCond='<'; dpCondLt.classList.add('active'); dpCondGt.classList.remove('active');
+});
+document.getElementById('dpRelease').addEventListener('click', ()=>{
+  const gene = dpGene.value;
+  if (!gene) return;
+  diseases.push({
+    id: ++_diseaseIdCtr,
+    targetType: parseInt(dpTarget.value),
+    gene, cond: _dpCond,
+    threshold: parseFloat(dpThresh.value),
+    effect: dpEffect.value,
+    severity: parseInt(dpSeverity.value) / 100,
+  });
+  dpRenderList();
+});
+document.getElementById('dpClose').addEventListener('click', ()=>{
+  dpPanel.classList.remove('open');
+  document.getElementById('btnDisease').classList.remove('active');
+});
+document.getElementById('btnDisease').addEventListener('click', ()=>{
+  const open = dpPanel.classList.toggle('open');
+  document.getElementById('btnDisease').classList.toggle('active', open);
+  if (open) { dpUpdateGeneList(); dpRenderList(); }
+});
+
+dpUpdateGeneList(); // initialise gene dropdown
 
 // Speed buttons
 const speedBtns=[
