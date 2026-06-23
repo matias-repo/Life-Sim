@@ -805,10 +805,10 @@ function recordHistory() {
 
 // ── Sprites ───────────────────────────────────────────────────────────────────
 // Each entry: [dx, dy, shade]  shade: 2=highlight  1=mid  0=shadow
-// Hunters face RIGHT (+x) and are ctx.rotate()'d to match velocity.
+// Animals (grazers + hunters) face RIGHT (+x) and rotate to match velocity.
 const SPRITES = {
-  // ── Plants ──────────────────────────────────────────────────────────────────
-  PLANT_DEFAULT: [                              // flower / bush
+  // ── Plants (static, no rotation) ────────────────────────────────────────────
+  PLANT_DEFAULT: [                              // leafy bush
     [0,-2,2],
     [-1,-1,1],[0,-1,2],[1,-1,1],
     [-2,0,1],[-1,0,2],[0,0,2],[1,0,2],[2,0,1],
@@ -823,69 +823,143 @@ const SPRITES = {
     [0,1,1],[0,2,0],
   ],
   PLANT_CACTUS: [                               // vertical trunk + outstretched arms
-    [0,-3,2],
-    [0,-2,2],
+    [0,-3,2],[0,-2,2],
     [-2,-1,2],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,2],
-    [0,0,2],
-    [0,1,2],
-    [0,2,1],
+    [0,0,2],[0,1,2],[0,2,1],
   ],
-  PLANT_MUSHROOM: [                             // wide cap on narrow stem
+  PLANT_MUSHROOM: [                             // wide spotted cap on narrow stem
     [-2,-2,1],[-1,-2,2],[0,-2,2],[1,-2,2],[2,-2,1],
     [-1,-1,2],[0,-1,2],[1,-1,2],
-    [0,0,1],
-    [0,1,0],
+    [0,0,1],[0,1,0],
+  ],
+  PLANT_VINE: [                                 // creeping horizontal vine + tendrils
+    [-3,0,1],[-2,0,2],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],[3,0,1],
+    [-3,1,0],[-1,1,1],[1,1,1],[3,1,0],
+    [-2,-1,1],[0,-1,2],[2,-1,1],
+    [0,-2,2],
+  ],
+  PLANT_FLOWER: [                               // large cross-shaped bloom
+    [0,-3,2],
+    [-1,-2,1],[0,-2,2],[1,-2,2],
+    [-3,0,2],[-2,0,1],[2,0,1],[3,0,2],
+    [-1,-1,2],[0,-1,2],[1,-1,2],
+    [-1,0,2],[0,0,2],[1,0,2],
+    [-1,1,2],[0,1,2],[1,1,2],
+    [-2,2,1],[0,2,2],[2,2,1],
+    [0,3,2],
+  ],
+  PLANT_FERN: [                                 // feathery fronds spreading wide
+    [0,-3,2],
+    [-1,-2,1],[0,-2,2],[1,-2,1],
+    [-2,-1,1],[0,-1,2],[2,-1,1],
+    [-3,0,1],[-1,0,2],[0,0,2],[1,0,2],[3,0,1],
+    [-2,1,1],[0,1,1],[2,1,1],
+    [0,2,0],
   ],
 
-  // ── Grazers (no rotation) ───────────────────────────────────────────────────
-  GRAZER_DEFAULT: [                             // wide squat herbivore
-    [-2,-2,2],[2,-2,2],
-    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],
-    [-2,0,1],[-1,0,2],[0,0,2],[1,0,2],[2,0,1],
-    [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
-    [-1,2,1],[1,2,1],
+  // ── Grazers (side profile, head at +x, rotated to face velocity) ────────────
+  GRAZER_DEFAULT: [                             // generic quadruped side view
+    [3,-2,1],
+    [3,-1,2],[2,-1,2],
+    [3,0,2],[2,0,2],
+    [1,-1,2],[1,0,2],
+    [0,-1,2],[0,0,2],[0,1,1],
+    [-1,-1,2],[-1,0,2],[-1,1,1],
+    [-2,-1,1],[-2,0,1],
+    [-3,0,0],
+    [2,1,1],[2,2,0],[1,2,0],
+    [-1,2,0],[0,2,0],
   ],
-  GRAZER_RABBIT: [                              // tall ears, compact round body, tail nub
-    [-1,-3,2],[1,-3,2],
-    [-1,-2,2],[1,-2,2],
-    [-1,-1,2],[0,-1,2],[1,-1,1],
-    [-2,0,1],[-1,0,2],[0,0,2],[1,0,2],[2,0,1],
-    [-1,1,2],[0,1,2],[1,1,2],
-    [-2,2,1],[2,2,1],
-    [2,0,2],
+  GRAZER_RABBIT: [                              // tall ears at head, round body, fluffy tail
+    [3,-4,2],[3,-3,2],[3,-2,1],
+    [2,-4,1],[2,-3,1],
+    [3,-1,2],[3,0,2],
+    [2,-1,2],[2,0,2],
+    [1,-1,2],[1,0,2],[1,1,1],
+    [0,-1,2],[0,0,2],[0,1,1],
+    [-1,0,2],[-1,1,1],
+    [-2,0,2],[-2,1,1],
+    [1,2,0],[0,2,0],
   ],
-  GRAZER_DEER: [                                // wide branching antlers, slender torso, long legs
-    [-3,-2,1],[-2,-2,2],
-    [2,-2,2],[3,-2,1],
-    [0,-1,2],[1,-1,1],
-    [-1,0,2],[0,0,2],[1,0,2],
-    [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
-    [-2,2,1],[-1,2,1],[1,2,1],[2,2,1],
+  GRAZER_DEER: [                                // branching antlers, slender elegant body
+    [4,-3,1],[3,-3,2],[2,-3,1],
+    [3,-2,2],[2,-2,2],
+    [3,-1,2],[2,-1,2],
+    [3,0,2],[2,0,1],
+    [1,-1,2],[1,0,2],
+    [0,-1,2],[0,0,2],
+    [-1,-1,2],[-1,0,2],
+    [-2,-1,1],[-2,0,1],
+    [-3,-1,0],
+    [2,1,1],[2,2,0],[1,2,0],
+    [-1,1,1],[-1,2,0],[0,2,0],
   ],
-  GRAZER_BISON: [                               // small head, massive wide body, hump
-    [1,-2,2],[2,-2,1],
-    [-2,-1,2],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],
-    [-3,0,1],[-2,0,2],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],[3,0,1],
-    [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
-    [-2,2,1],[2,2,1],
+  GRAZER_BISON: [                               // shoulder hump, heavy lowered head, beard
+    [1,-2,2],[0,-2,2],
+    [3,0,2],[3,1,1],
+    [2,0,2],[2,1,1],
+    [2,-1,1],
+    [1,-1,2],[1,0,2],[1,1,1],
+    [0,-1,2],[0,0,2],[0,1,1],
+    [-1,-1,2],[-1,0,2],[-1,1,1],
+    [-2,-1,1],[-2,0,2],[-2,1,1],
+    [-3,0,0],
+    [2,2,1],[1,2,0],
+    [-1,2,0],[-2,2,0],
+  ],
+  GRAZER_HORSE: [                               // long snout, flowing mane, slim athletic legs
+    [4,-1,2],[4,0,2],
+    [3,-2,1],[3,-1,2],[3,0,2],
+    [2,-2,1],[2,-1,2],[2,0,2],
+    [1,-2,1],[1,-1,2],[1,0,2],
+    [0,-1,2],[0,0,2],
+    [-1,-1,2],[-1,0,2],
+    [-2,-1,1],[-2,0,1],
+    [-3,-1,0],[-3,0,0],
+    [2,1,1],[2,2,0],[3,1,0],
+    [-1,1,1],[-1,2,0],[0,2,0],
+  ],
+  GRAZER_TORTOISE: [                            // domed shell, tiny head, stubby legs
+    [3,0,2],[3,1,1],
+    [2,-1,0],[2,0,1],[2,1,0],
+    [1,-2,1],[1,-1,2],[1,0,2],[1,1,0],
+    [0,-2,2],[0,-1,2],[0,0,2],[0,1,0],
+    [-1,-2,1],[-1,-1,2],[-1,0,2],[-1,1,0],
+    [-2,-1,0],[-2,0,0],
+    [2,2,0],[1,2,0],
+    [-1,2,0],[-2,2,0],
+  ],
+  GRAZER_ELEPHANT: [                            // trunk sweeping forward, fan ears, massive body
+    [5,1,1],[4,1,2],[3,1,2],
+    [4,0,2],[3,0,2],
+    [3,-3,1],[3,-2,2],[3,-1,2],
+    [2,-3,0],[2,-2,2],[2,-1,2],[2,0,2],[2,1,1],
+    [1,-2,1],[1,-1,2],[1,0,2],[1,1,1],
+    [0,-2,1],[0,-1,2],[0,0,2],[0,1,2],
+    [-1,-1,2],[-1,0,2],[-1,1,2],
+    [-2,-1,1],[-2,0,2],[-2,1,1],
+    [-3,0,1],
+    [1,2,1],[0,2,1],
+    [-1,2,1],[-2,2,1],
   ],
 
   // ── Hunters (face +x, rotated to velocity) ──────────────────────────────────
-  HUNTER_DEFAULT: [                             // compact arrow
+  HUNTER_DEFAULT: [                             // compact arrow-shaped body
     [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,1],
     [-2,0,1],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],
     [-2,1,1],[-1,1,2],[0,1,2],[1,1,1],
   ],
-  HUNTER_CAT: [                                 // very elongated, streamlined, tail tip
+  HUNTER_CAT: [                                 // sleek elongated body, long tail
     [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],
     [-3,0,0],[-2,0,2],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],[3,0,2],
     [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
   ],
-  HUNTER_WOLF: [                                // pointed ears, extended snout, tail
-    [-1,-2,1],[1,-2,1],
-    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,1],
-    [-3,0,0],[-2,0,2],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],[3,0,1],
+  HUNTER_WOLF: [                                // pointed ears, wide chest, bushy tail
+    [-1,-2,1],[2,-2,1],
+    [-2,-1,1],[-1,-1,2],[0,-1,2],[1,-1,2],[2,-1,2],[3,-1,1],
+    [-3,0,0],[-2,0,2],[-1,0,2],[0,0,2],[1,0,2],[2,0,2],[3,0,2],
     [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
+    [-3,0,1],[-4,0,0],
   ],
   HUNTER_BEAR: [                                // round ears, massive wide body, stubby legs
     [-2,-2,2],[2,-2,2],
@@ -894,32 +968,78 @@ const SPRITES = {
     [-2,1,1],[-1,1,2],[0,1,2],[1,1,2],[2,1,1],
     [-1,2,1],[0,2,1],[1,2,1],
   ],
+  HUNTER_SNAKE: [                               // long sinuous body, flat triangular head
+    [4,-1,1],[4,0,2],[4,1,1],
+    [3,-1,2],[3,0,2],
+    [2,0,2],[2,1,1],
+    [1,-1,1],[1,0,2],
+    [0,0,2],[0,1,1],
+    [-1,-1,1],[-1,0,2],
+    [-2,0,2],[-2,-1,1],
+    [-3,0,2],[-3,1,1],
+    [-4,0,1],
+    [-5,0,0],
+  ],
+  HUNTER_EAGLE: [                               // soaring bird, wings spread wide
+    [3,-1,2],[3,0,2],
+    [2,-1,2],[2,0,2],
+    [1,-3,1],[1,-2,2],[1,-1,2],[1,0,2],[1,1,2],[1,2,1],[1,3,1],
+    [0,-3,0],[0,-2,2],[0,-1,2],[0,0,2],[0,1,2],[0,2,2],[0,3,0],
+    [-1,-2,1],[-1,-1,2],[-1,0,2],[-1,1,2],[-1,2,1],
+    [-2,-1,0],[-2,0,1],[-2,1,0],
+    [2,1,0],[3,1,0],
+  ],
+  HUNTER_CROCODILE: [                           // wide flat snout, armored ridges, long tail
+    [4,-1,1],[4,0,2],[4,1,1],
+    [3,-1,2],[3,0,2],[3,1,1],
+    [2,-1,1],[2,0,2],
+    [1,-1,2],[1,0,2],[1,1,0],
+    [0,-2,1],[0,-1,2],[0,0,2],
+    [-1,-2,1],[-1,-1,2],[-1,0,2],
+    [-2,-1,1],[-2,0,2],[-2,1,0],
+    [-3,-1,1],[-3,0,2],
+    [-4,0,1],[-5,0,0],
+    [2,1,0],[1,1,0],
+    [-1,1,0],[-2,1,0],
+  ],
 };
 
 const ARCHETYPE_NAMES = {
   PLANT_DEFAULT:'plant', PLANT_TREE:'tree', PLANT_CACTUS:'cactus', PLANT_MUSHROOM:'mushroom',
+  PLANT_VINE:'vine', PLANT_FLOWER:'flower', PLANT_FERN:'fern',
   GRAZER_DEFAULT:'grazer', GRAZER_RABBIT:'rabbit', GRAZER_DEER:'deer', GRAZER_BISON:'bison',
+  GRAZER_HORSE:'horse', GRAZER_TORTOISE:'tortoise', GRAZER_ELEPHANT:'elephant',
   HUNTER_DEFAULT:'hunter', HUNTER_CAT:'big cat', HUNTER_WOLF:'wolf', HUNTER_BEAR:'bear',
+  HUNTER_SNAKE:'snake', HUNTER_EAGLE:'eagle', HUNTER_CROCODILE:'crocodile',
 };
 
 function getArchetype(type, genes) {
   const g=genes;
   if(type===TYPE.PLANT){
     if(g.size>7.0&&(g.thorns??0)<0.30&&(g.toxicity??0)<0.30) return 'PLANT_TREE';
-    if((g.thorns??0)>0.45)   return 'PLANT_CACTUS';
-    if((g.toxicity??0)>0.45) return 'PLANT_MUSHROOM';
+    if((g.thorns??0)>0.45)                                    return 'PLANT_CACTUS';
+    if((g.toxicity??0)>0.45)                                  return 'PLANT_MUSHROOM';
+    if((g.spreadChance??0)>0.006)                             return 'PLANT_VINE';
+    if((g.sporeChance??0)>0.003)                              return 'PLANT_FLOWER';
+    if(g.growthRate>0.18&&g.size<5.0)                        return 'PLANT_FERN';
     return 'PLANT_DEFAULT';
   }
   if(type===TYPE.GRAZER){
-    if(g.size>8.0&&(g.stamina??1)>1.7)              return 'GRAZER_BISON';
-    if(g.senseRadius>105||(g.camouflage??0)>0.45)   return 'GRAZER_DEER';
-    if(g.speed>1.9&&(g.fertility??1)>1.4)           return 'GRAZER_RABBIT';
+    if(g.size>9.5&&(g.aggression??0)>0.45)                   return 'GRAZER_ELEPHANT';
+    if(g.size>8.0&&(g.stamina??1)>1.7)                       return 'GRAZER_BISON';
+    if(g.speed>2.2&&g.size<7.5)                              return 'GRAZER_HORSE';
+    if(g.senseRadius>105||(g.camouflage??0)>0.45)            return 'GRAZER_DEER';
+    if(g.speed>1.9&&(g.fertility??1)>1.4)                    return 'GRAZER_RABBIT';
+    if((g.poisonResistance??0)>0.50)                          return 'GRAZER_TORTOISE';
     return 'GRAZER_DEFAULT';
   }
   // TYPE.HUNTER
-  if(g.size>9.5)              return 'HUNTER_BEAR';
-  if(g.speed>2.4)             return 'HUNTER_CAT';
-  if((g.aggression??0)>0.80)  return 'HUNTER_WOLF';
+  if(g.size>9.5)                                             return 'HUNTER_BEAR';
+  if(g.size>8.0&&(g.aggression??0)>0.65)                    return 'HUNTER_CROCODILE';
+  if(g.speed>2.4)                                            return 'HUNTER_CAT';
+  if(g.senseRadius>145)                                      return 'HUNTER_EAGLE';
+  if((g.aggression??0)>0.80)                                 return 'HUNTER_WOLF';
+  if((g.stealth??0)>0.55)                                    return 'HUNTER_SNAKE';
   return 'HUNTER_DEFAULT';
 }
 
@@ -1084,7 +1204,7 @@ function draw() {
     // Pixel art body
     ctx.save();
     ctx.translate(e.x,e.y);
-    if(t===TYPE.HUNTER){
+    if(t!==TYPE.PLANT){
       const spd=Math.sqrt(e.vx*e.vx+e.vy*e.vy);
       if(spd>0.05) ctx.rotate(Math.atan2(e.vy,e.vx));
     }
